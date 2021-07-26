@@ -22,7 +22,7 @@
  ***************************************************************************/
 """
 
-__author__ = 'CamellOnCase'
+__author__ = 'Francisco Alves Camello Neto'
 __date__ = '2021-07-20'
 __copyright__ = '(C) 2021 by CamellOnCase'
 
@@ -32,7 +32,7 @@ __revision__ = '$Format:%H$'
 
 from qgis.core import QgsProcessingProvider
 from .alos_contour_extractor_algorithm import AlosContourExtractorAlgorithm
-from .alos_elevation_points_extractor_algorithm import AlosElevationPointsExtractorAlgorithm
+from .alos_elevation_points_extractor_algorithm import DemElevationPointsExtractorAlgorithm
 
 
 class AlosContourExtractorProvider(QgsProcessingProvider):
@@ -55,7 +55,7 @@ class AlosContourExtractorProvider(QgsProcessingProvider):
         Loads all algorithms belonging to this provider.
         """
         self.addAlgorithm(AlosContourExtractorAlgorithm())
-        self.addAlgorithm(AlosElevationPointsExtractorAlgorithm())
+        self.addAlgorithm(DemElevationPointsExtractorAlgorithm())
         # add additional algorithms here
         # self.addAlgorithm(MyOtherAlgorithm())
 
@@ -65,7 +65,7 @@ class AlosContourExtractorProvider(QgsProcessingProvider):
         string should be a unique, short, character only string, eg "qgis" or
         "gdal". This string should not be localised.
         """
-        return 'Alos Palsar Tools'
+        return 'demtools'
 
     def name(self):
         """
