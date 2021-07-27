@@ -34,6 +34,7 @@ import processing
 from qgis.PyQt.Qt import QVariant
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
+                       QgsWkbTypes,
                        QgsFeatureSink,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
@@ -83,7 +84,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
                 [QgsProcessing.TypeRaster]
             )
         )
-        
+
         self.addParameter(
             QgsProcessingParameterBand(
                 self.BAND_NUMBER,
@@ -136,13 +137,17 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        source = self.parameterAsRasterLayer(parameters, self.RASTER_INPUT, context)
-        band = self.parameterAsRasterLayer(parameters, self.BAND_NUMBER, context)
-        interval = self.parameterAsDouble(parameters, self.CONTOUR_INTERVAL, context)
-        elevation_attribute = self.parameterAsDouble(parameters, self.ELEVATION_ATTRIBUTE, context)
-        
-        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
-                context, source.fields(), source.wkbType(), source.sourceCrs())
+        source = self.parameterAsRasterLayer(
+            parameters, self.RASTER_INPUT, context)
+        band = self.parameterAsInt(
+            parameters, self.BAND_NUMBER, context)
+        interval = self.parameterAsDouble(
+            parameters, self.CONTOUR_INTERVAL, context)
+        elevation_attribute = self.parameterAsString(
+            parameters, self.ELEVATION_ATTRIBUTE, context)
+
+        # (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
+        #                                        context, QgsWkbTypes.Linestring, source.crs())
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
@@ -162,28 +167,27 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         total = 100.0 / outputDict.featureCount() if outputDict.featureCount() else 0
         features = outputDict.getFeatures()
 
-        for current, feature in enumerate(features):
-            # Stop the algorithm if cancel button has been clicked
-            if feedback.isCanceled():
-                break
+        # for current, feature in enumerate(features):
+        #     # Stop the algorithm if cancel button has been clicked
+        #     if feedback.isCanceled():
+        #         break
 
-            # Add a feature in the sink
-            sink.addFeature(feature, QgsFeatureSink.FastInsert)
+        #     # Add a feature in the sink
+        #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
 
-            # Update the progress bar
-            feedback.setProgress(int(current * total))
+        #     # Update the progress bar
+        #     feedback.setProgress(int(current * total))
 
-        # Return the results of the algorithm. In this case our only result is
-        # the feature sink which contains the processed features, but some
-        # algorithms may return multiple feature sinks, calculated numeric
-        # statistics, etc. These should all be included in the returned
-        # dictionary, with keys matching the feature corresponding parameter
-        # or output names.
-        return {self.CONTOUR: outputDict}
+        # # Return the results of the algorithm. In this case our only result is
+        # # the feature sink which contains the processed features, but some
+        # # algorithms may return multiple feature sinks, calculated numeric
+        # # statistics, etc. These should all be included in the returned
+        # # dictionary, with keys matching the feature corresponding parameter
+        # # or output names.
+        # return {self.CONTOUR: dest_id}
 
     def runClean(self, parameters, context, feedback=None):
 
-        
         output = processing.run(
             'gdal:contour', parameters, context=context, feedback=feedback)
         return output['OUTPUT']
