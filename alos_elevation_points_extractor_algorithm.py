@@ -142,12 +142,13 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         input_vector_layer = self.parameterAsVectorLayer(parameters, self.VECTOR_INPUT, context)
 
         inputType = input_vector_layer.wkbType()
+        inputCrs = input_vector_layer.sourceCrs()
         isMulti = QgsWkbTypes.isMultiType(int(inputType))
         inputFields = input_vector_layer.fields()
 
         dem_raster = self.parameterAsRasterLayer(parameters, self.RASTER_INPUT, context)
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-                                               context, input_vector_layer.fields(), input_vector_layer.wkbType(), input_vector_layer.sourceCrs())
+                                               context, inputFields, inputType, inputCrs)
         (outershell_sink, outershell_dest_id) = self.parameterAsSink(parameters, self.OUTERSHELL,
                 context, inputFields, 6 if isMulti else 3, input_vector_layer.sourceCrs())
         if outershell_sink is None:
