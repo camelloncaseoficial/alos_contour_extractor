@@ -37,7 +37,9 @@ from qgis.core import (QgsProcessing,
                        QgsFeatureSink,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
+                       QgsProcessingParameterBand,
                        QgsProcessingParameterNumber,
+                       QgsProcessingParameterString,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink)
 
@@ -60,9 +62,11 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     # used when calling the algorithm from another algorithm, or when
     # calling from the QGIS console.
 
-    OUTPUT = 'OUTPUT'
-    INPUT = 'INPUT'
-    INTERVAL = 'INTERVAL'
+    RASTER_INPUT = 'RASTER_INPUT'
+    BAND_NUMBER = 'BAND_NUMBER'
+    CONTOUR_INTERVAL = 'CONTOUR_INTERVAL'
+    ELEVATION_ATTRIBUTE = 'ELEVATION_ATTRIBUTE'
+    CONTOUR = 'CONTOUR'
 
     def initAlgorithm(self, config):
         """
@@ -70,30 +74,59 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         with some other properties.
         """
 
+        # We add the input vector features source. It can have any kind of
+        # geometry.
         self.addParameter(
             QgsProcessingParameterRasterLayer(
-                self.INPUT,
-                self.tr('Input layer'),
-                None,
-                False
+                self.RASTER_INPUT,
+                self.tr('Input DEM raster'),
+                [QgsProcessing.TypeRaster]
+            )
+        )
+        
+        self.addParameter(
+            QgsProcessingParameterBand(
+                self.BAND_NUMBER,
+                self.tr('Band number'),
+                parentLayerParameterName=self.RASTER_INPUT
             )
         )
 
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.INTERVAL,
+                self.CONTOUR_INTERVAL,
                 self.tr('Interval between contour lines'),
-                QgsProcessingParameterNumber.Double,
-                QVariant(1.0)
+                type=0
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                self.ELEVATION_ATTRIBUTE,
+                self.tr('Interval between contour lines')
             )
         )
 
+        # We add a feature sink in which to store our processed features (this
+        # usually takes the form of a newly created vector layer when the
+        # algorithm is run in QGIS).
         self.addParameter(
             QgsProcessingParameterFeatureSink(
-                self.OUTPUT,
-                self.tr('Contours')
+                self.CONTOUR,
+                self.tr('Contour lines')
             )
         )
+        # self.addParameter(
+        #     QgsProcessingParameterFeatureSink(
+        #         self.DONUTHOLE,
+        #         self.tr('Donut Hole')
+        #     )
+        # )
+        # self.addParameter(
+        #     QgsProcessingParameterFeatureSink(
+        #         self.OUTPUT,
+        #         self.tr('Output layer')
+        #     )
+        # )
 
     def processAlgorithm(self, parameters, context, feedback):
         """
@@ -103,28 +136,42 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        source = self.parameterAsRasterLayer(parameters, self.INPUT, context)
-        interval = self.parameterAsDouble(parameters, self.INTERVAL, context)
-
-        outputDict = self.runClean(source, interval, context)
-        # (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-        #         context, source.fields(), source.wkbType(), source.sourceCrs())
+        source = self.parameterAsRasterLayer(parameters, self.RASTER_INPUT, context)
+        band = self.parameterAsRasterLayer(parameters, self.BAND_NUMBER, context)
+        interval = self.parameterAsDouble(parameters, self.CONTOUR_INTERVAL, context)
+        elevation_attribute = self.parameterAsDouble(parameters, self.ELEVATION_ATTRIBUTE, context)
+        
+        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
+                context, source.fields(), source.wkbType(), source.sourceCrs())
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
-        # total = 100.0 / source.featureCount() if source.featureCount() else 0
-        # features = source.getFeatures()
+        parameters = {
+            'BAND': band,
+            'CREATE_3D': False,
+            'EXTRA': '',
+            'FIELD_NAME': elevation_attribute,
+            'IGNORE_NODATA': False,
+            'INPUT': source,
+            'INTERVAL': interval,
+            'NODATA': None,
+            'OFFSET': 0,
+            'OUTPUT': 'TEMPORARY_OUTPUT'
+        }
+        outputDict = self.runClean(parameters, context, feedback)
+        total = 100.0 / outputDict.featureCount() if outputDict.featureCount() else 0
+        features = outputDict.getFeatures()
 
-        # for current, feature in enumerate(features):
-        #     # Stop the algorithm if cancel button has been clicked
-        #     if feedback.isCanceled():
-        #         break
+        for current, feature in enumerate(features):
+            # Stop the algorithm if cancel button has been clicked
+            if feedback.isCanceled():
+                break
 
-        #     # Add a feature in the sink
-        #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            # Add a feature in the sink
+            sink.addFeature(feature, QgsFeatureSink.FastInsert)
 
-        #     # Update the progress bar
-        #     feedback.setProgress(int(current * total))
+            # Update the progress bar
+            feedback.setProgress(int(current * total))
 
         # Return the results of the algorithm. In this case our only result is
         # the feature sink which contains the processed features, but some
@@ -132,25 +179,14 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         # statistics, etc. These should all be included in the returned
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
-        return {self.OUTPUT: outputDict}
+        return {self.CONTOUR: outputDict}
 
-    def runClean(self, INPUT, INTERVAL, context, feedback=None):
+    def runClean(self, parameters, context, feedback=None):
 
-        parameters = {
-            'BAND': 1,
-            'CREATE_3D': False,
-            'EXTRA': '',
-            'FIELD_NAME': 'cota',
-            'IGNORE_NODATA': False,
-            'INPUT': INPUT,
-            'INTERVAL': INTERVAL,
-            'NODATA': None,
-            'OFFSET': 1e-07,
-            'OUTPUT': 'TEMPORARY_OUTPUT'
-        }
-        outputDict = processing.run(
+        
+        output = processing.run(
             'gdal:contour', parameters, context=context, feedback=feedback)
-        return outputDict
+        return output['OUTPUT']
 
     def name(self):
         """
