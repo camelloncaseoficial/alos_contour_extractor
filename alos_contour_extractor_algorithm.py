@@ -164,7 +164,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
             'OUTPUT': 'TEMPORARY_OUTPUT'
         }
         outputDict = self.runClean(parameters, context, feedback)
-        total = 100.0 / outputDict.featureCount() if outputDict.featureCount() else 0
+        # total = 100.0 / outputDict.featureCount() if outputDict.featureCount() else 0
         features = outputDict.getFeatures()
 
         # for current, feature in enumerate(features):
@@ -200,7 +200,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Contour Extractor'
+        return 'contourextractor'
 
     def displayName(self):
         """
