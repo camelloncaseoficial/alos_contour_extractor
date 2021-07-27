@@ -35,6 +35,8 @@ from qgis.PyQt.Qt import QVariant
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
                        QgsWkbTypes,
+                       QgsFields,
+                       QgsField,
                        QgsFeatureSink,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
@@ -146,8 +148,10 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         elevation_attribute = self.parameterAsString(
             parameters, self.ELEVATION_ATTRIBUTE, context)
 
-        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
-                                               context, 2, source.crs())
+        contour_fields = QgsFields()
+        contour_fields.append(QgsField(elevation_attribute, QVariant.Double))
+
+        (sink, dest_id) = self.parameterAsSink(parameters, contour_fields, QgsWkbTypes.LineGeometry, source.crs(), self.CONTOUR, context)
         # output = self.parameterAsOutputLayer(parameters, self.CONTOUR, context)
 
         # Compute the number of steps to display within the progress bar and
