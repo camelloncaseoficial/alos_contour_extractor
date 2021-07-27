@@ -146,8 +146,9 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         elevation_attribute = self.parameterAsString(
             parameters, self.ELEVATION_ATTRIBUTE, context)
 
-        # (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
-        #                                        context, QgsWkbTypes.Linestring, source.crs())
+        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
+                                               context, 2, source.crs())
+        # output = self.parameterAsOutputLayer(parameters, self.CONTOUR, context)
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
@@ -161,7 +162,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
             'INTERVAL': interval,
             'NODATA': None,
             'OFFSET': 0,
-            'OUTPUT': 'TEMPORARY_OUTPUT'
+            'OUTPUT': dest_id
         }
         outputDict = self.runClean(parameters, context, feedback)
         # total = 100.0 / outputDict.featureCount() if outputDict.featureCount() else 0
@@ -178,13 +179,13 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         #     # Update the progress bar
         #     feedback.setProgress(int(current * total))
 
-        # # Return the results of the algorithm. In this case our only result is
-        # # the feature sink which contains the processed features, but some
-        # # algorithms may return multiple feature sinks, calculated numeric
-        # # statistics, etc. These should all be included in the returned
-        # # dictionary, with keys matching the feature corresponding parameter
-        # # or output names.
-        # return {self.CONTOUR: dest_id}
+        # Return the results of the algorithm. In this case our only result is
+        # the feature sink which contains the processed features, but some
+        # algorithms may return multiple feature sinks, calculated numeric
+        # statistics, etc. These should all be included in the returned
+        # dictionary, with keys matching the feature corresponding parameter
+        # or output names.
+        return {self.CONTOUR: outputDict}
 
     def runClean(self, parameters, context, feedback=None):
 

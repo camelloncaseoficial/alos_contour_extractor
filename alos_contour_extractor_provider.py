@@ -65,7 +65,7 @@ class AlosContourExtractorProvider(QgsProcessingProvider):
         string should be a unique, short, character only string, eg "qgis" or
         "gdal". This string should not be localised.
         """
-        return 'Alos Palsar Tools'
+        return 'demtools'
 
     def name(self):
         """
