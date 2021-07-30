@@ -171,6 +171,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         multiStepFeedback = QgsProcessingMultiStepFeedback(5, feedback)
         multiStepFeedback.setCurrentStep(0)
         multiStepFeedback.pushInfo(self.tr('Multi to single part'))
+
         output = algo_runner.run_multi_to_single_part(input_vector_layer, context, feedback)
 
         features = output.getFeatures()
@@ -282,6 +283,12 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         formatting characters.
         """
         return 'Elevation Point Tools'
+    
+    def shortHelpString(self):
+        """
+        Retruns a short helper string for the algorithm
+        """
+        return self.tr("""extracts elevation points""")
 
     def tr(self, string):
         return QCoreApplication.translate('Processing', string)
