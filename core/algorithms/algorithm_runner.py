@@ -26,6 +26,7 @@ __author__ = 'Francisco Alves Camello Neto'
 __date__ = '2021-07-20'
 __copyright__ = '(C) 2021 by CamellOnCase'
 
+import uuid
 import processing
 from qgis.analysis import QgsGeometrySnapper, QgsInternalGeometrySnapper
 from qgis.core import (edit, Qgis, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
@@ -47,6 +48,20 @@ class AlgorithmRunner():
         self.iface = iface
         if iface:
             self.canvas = iface.mapCanvas()
+
+    def generate_gdal_output(self):
+        uuid_value = str(uuid.uuid4()).replace('-','')
+        output = QgsProcessingUtils.generateTempFilename('output_{uuid}.shp'.format(uuid=uuid_value))
+        error = QgsProcessingUtils.generateTempFilename('error_{uuid}.shp'.format(uuid=uuid_value))
+        return output, error
+    
+    def get_gdal_return(self, outputDict, context, returnError = False):
+        lyr = QgsProcessingUtils.mapLayerFromString(outputDict['OUTPUT'], context)
+        if returnError:
+            errorLyr = QgsProcessingUtils.mapLayerFromString(outputDict['error'], context)
+            return lyr, errorLyr
+        else:
+            return lyr
 
     def run_buffer(self, inputLayer, distance, context, dissolve=False, endCapStyle=None, joinStyle=None,
                    segments=None, mitterLimit=None, feedback=None, output_layer=None):
@@ -109,5 +124,46 @@ class AlgorithmRunner():
             'OUTPUT': output_layer
         }
         output = processing.run('native:polygonize',
+                                parameters, context=context, feedback=feedback)
+        return output['OUTPUT']
+
+    def run_contour(self, inputLyr, band, elevation_attribute, interval, context, feedback=None, output_layer=None):
+        # output_layer = 'memory:' if output_layer is None else output_layer
+        output = QgsProcessingUtils.generateTempFilename('OUTPUT.gpkg')
+        parameters = {
+            'BAND': band,
+            'CREATE_3D': False,
+            'EXTRA': '',
+            'FIELD_NAME': elevation_attribute,
+            'IGNORE_NODATA': False,
+            'INPUT': inputLyr,
+            'INTERVAL': interval,
+            'NODATA': None,
+            'OFFSET': 0,
+            'OUTPUT': output}
+        outputDict = processing.run('gdal:contour',
+                                    parameters, context=context, feedback=feedback)
+        return self.get_gdal_return(outputDict, context)
+
+    def run_simplify(self, inputLyr, method, tolerance, context, feedback=None, output_layer=None):
+        output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = {
+            'INPUT': inputLyr,
+            'METHOD': method,
+            'TOLERANCE': tolerance,
+            'OUTPUT': output_layer}
+        output = processing.run('native:simplifygeometries',
+                                parameters, context=context, feedback=feedback)
+        return output['OUTPUT']
+
+    def run_smooth(self, inputLyr, iterations, offset, max_angle, context, feedback=None, output_layer=None):
+        output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = {
+            'INPUT': inputLyr,
+            'ITERATIONS': iterations,
+            'OFFSET': offset,
+            'MAX_ANGLE': max_angle,
+            'OUTPUT': output_layer}
+        output = processing.run('native:smoothgeometry',
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
