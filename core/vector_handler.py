@@ -34,6 +34,7 @@ from qgis.core import (edit, Qgis, QgsCoordinateReferenceSystem, QgsCoordinateTr
                        QgsSpatialIndex, QgsVectorDataProvider, QgsVectorLayer, QgsVectorLayerUtils, QgsWkbTypes,
                        QgsProcessingFeatureSourceDefinition, QgsFeatureSink)
 from qgis.PyQt.Qt import QObject, QVariant
+from .algorithms.algorithm_runner import AlgorithmRunner
 
 
 class VectorHandler(QObject):
@@ -47,6 +48,7 @@ class VectorHandler(QObject):
         self.iface = iface
         if iface:
             self.canvas = iface.mapCanvas()
+        self.algorithmRunner = AlgorithmRunner(iface)
 
     def getOuterShellAndHoles(self, geom, isMulti):
         outershells, donutholes = [], []
@@ -78,3 +80,16 @@ class VectorHandler(QObject):
             newFeat.setGeometry(hole)
             donutHoleList.append(newFeat)
         return outershellList, donutHoleList
+
+    def retrieve_simplified_smoothed_contour(self, contour_lines, context, feedback=None):
+        multiStepFeedback = QgsProcessingMultiStepFeedback(3, feedback)
+        multiStepFeedback.setCurrentStep(0)
+        multiStepFeedback.pushInfo(self.tr('Simplifying contour lines'))
+        first_simplified = self.algorithmRunner.run_simplify(contour_lines, 0, 5, context, feedback=multiStepFeedback)
+        multiStepFeedback.setCurrentStep(1)
+        multiStepFeedback.pushInfo(self.tr('Smoothing contour lines'))
+        smoothed = self.algorithmRunner.run_smooth(first_simplified, 3, 0.25, 180, context, feedback)
+        multiStepFeedback.setCurrentStep(1)
+        multiStepFeedback.pushInfo(self.tr('Last simplification'))
+        last_simplified = self.algorithmRunner.run_simplify(smoothed, 0, 3, context, feedback)
+        return last_simplified
