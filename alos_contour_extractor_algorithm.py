@@ -163,8 +163,11 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         
         
         outputDict = algo_runner.run_contour(input_raster_layer, band, elevation_attribute, interval, context, feedback)
-        cleaned_contour = vector_handler.retrieveSimplifiedSmoothedContour(outputDict, context, feedback)
+
+        cleaned_contour = vector_handler.retrieve_simplified_smoothed_contour(outputDict, context, feedback)
+
         total = 100.0 / cleaned_contour.featureCount() if cleaned_contour.featureCount() else 0
+        
         features = cleaned_contour.getFeatures()
 
         for current, feature in enumerate(features):
