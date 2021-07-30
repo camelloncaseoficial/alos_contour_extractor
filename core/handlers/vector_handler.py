@@ -26,6 +26,7 @@ __author__ = 'Francisco Alves Camello Neto'
 __date__ = '2021-07-20'
 __copyright__ = '(C) 2021 by CamellOnCase'
 
+import math
 import processing
 from qgis.analysis import QgsGeometrySnapper, QgsInternalGeometrySnapper
 from qgis.core import (edit, Qgis, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
@@ -34,7 +35,8 @@ from qgis.core import (edit, Qgis, QgsCoordinateReferenceSystem, QgsCoordinateTr
                        QgsSpatialIndex, QgsVectorDataProvider, QgsVectorLayer, QgsVectorLayerUtils, QgsWkbTypes,
                        QgsProcessingFeatureSourceDefinition, QgsFeatureSink)
 from qgis.PyQt.Qt import QObject, QVariant
-from .algorithms.algorithm_runner import AlgorithmRunner
+from ..algorithms.algorithm_runner import AlgorithmRunner
+from .attribute_handler import AttributeHandler
 
 
 class VectorHandler(QObject):
@@ -48,9 +50,18 @@ class VectorHandler(QObject):
         self.iface = iface
         if iface:
             self.canvas = iface.mapCanvas()
-        self.algorithmRunner = AlgorithmRunner(iface)
+        self.algorithm_runner = AlgorithmRunner(iface)
+        self.attribute_handler = AttributeHandler(iface)
 
-    def getOuterShellAndHoles(self, geom, isMulti):
+    def create_feature(self, geometry, fields=None, set_attributes=False):
+        feature = QgsFeature()
+        feature.setGeometry(geometry)
+        if set_attributes:
+            feature.setAttributes(fields)
+            
+        return feature
+
+    def get_outershell_and_holes(self, geom, isMulti):
         outershells, donutholes = [], []
         for part in geom.asGeometryCollection():
             for current, item in enumerate(part.asPolygon()):
@@ -63,10 +74,10 @@ class VectorHandler(QObject):
                     donutholes.append(newGeom)
         return outershells, donutholes
 
-    def getFeatureOuterShellAndHoles(self, feat, isMulti):
+    def get_feature_outershell_and_holes(self, feat, isMulti):
         geom = feat.geometry()
 
-        outershells, donutholes = self.getOuterShellAndHoles(
+        outershells, donutholes = self.get_outershell_and_holes(
             geom, isMulti)
         outershellList = []
         for shell in outershells:
@@ -82,14 +93,44 @@ class VectorHandler(QObject):
         return outershellList, donutHoleList
 
     def retrieve_simplified_smoothed_contour(self, contour_lines, context, feedback=None):
-        multiStepFeedback = QgsProcessingMultiStepFeedback(3, feedback)
-        multiStepFeedback.setCurrentStep(0)
-        multiStepFeedback.pushInfo(self.tr('Simplifying contour lines'))
-        first_simplified = self.algorithmRunner.run_simplify(contour_lines, 0, 5, context, feedback=multiStepFeedback)
-        multiStepFeedback.setCurrentStep(1)
-        multiStepFeedback.pushInfo(self.tr('Smoothing contour lines'))
-        smoothed = self.algorithmRunner.run_smooth(first_simplified, 3, 0.25, 180, context, feedback)
-        multiStepFeedback.setCurrentStep(1)
-        multiStepFeedback.pushInfo(self.tr('Last simplification'))
-        last_simplified = self.algorithmRunner.run_simplify(smoothed, 0, 3, context, feedback)
-        return last_simplified
+
+        smoothed = self.algorithm_runner.run_smooth(contour_lines, 2, 0.3, 180, context, feedback=feedback)
+
+        first_simplified = self.algorithm_runner.run_simplify(smoothed, 0, 2, context, feedback=feedback)
+
+        second_smoothed = self.algorithm_runner.run_smooth(first_simplified, 3, 0.3, 180, context, feedback=feedback)
+
+        last_simplified = self.algorithm_runner.run_simplify(second_smoothed, 0, 1, context, feedback=feedback)
+
+        delete_field = self.algorithm_runner.run_delete_field(last_simplified, ['fid'], context, feedback=feedback)
+
+        return delete_field
+
+    def get_out_of_bounds_angle(self, part, angle, invalid_range=None):
+
+        off_bounds_list= list()
+
+        if invalid_range is not None:
+            minAngle, maxAngle = invalid_range
+
+        line = part.asPolyline()
+        nVertex = len(line)-1
+
+        for i in range(1,nVertex):
+            vertex_angle = (line[i].azimuth(line[i-1]) - line[i].azimuth(line[i+1]) + 360)
+            vertex_angle = math.fmod(vertex_angle, 360)
+            if vertex_angle > 180:
+                vertex_angle = 360 - vertex_angle
+            if invalid_range is not None and (vertex_angle >= minAngle and vertex_angle <= maxAngle):
+                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]))
+                off_bounds_list.append(feature)
+                continue
+            if vertex_angle < angle:
+                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]))
+                self.attribute_handler.set_attribute_value(feature, 'reason', 'spike')
+                off_bounds_list.append(feature)
+
+        return off_bounds_list
+        
+    def get_contour_intersection(self, contour_lines, context, feedback=None):
+        intersection_points = self.algorithm_runner.run_line_intersections(contour_lines, context, feedback)

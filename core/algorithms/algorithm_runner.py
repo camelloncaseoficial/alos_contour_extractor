@@ -127,7 +127,7 @@ class AlgorithmRunner():
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
-    def run_contour(self, inputLyr, band, elevation_attribute, interval, context, feedback=None, output_layer=None):
+    def run_contour(self, input_layer, band, elevation_attribute, interval, context, feedback=None, output_layer=None):
         # output_layer = 'memory:' if output_layer is None else output_layer
         output = QgsProcessingUtils.generateTempFilename('OUTPUT.gpkg')
         parameters = {
@@ -136,7 +136,7 @@ class AlgorithmRunner():
             'EXTRA': '',
             'FIELD_NAME': elevation_attribute,
             'IGNORE_NODATA': False,
-            'INPUT': inputLyr,
+            'INPUT': input_layer,
             'INTERVAL': interval,
             'NODATA': None,
             'OFFSET': 0,
@@ -145,10 +145,10 @@ class AlgorithmRunner():
                                     parameters, context=context, feedback=feedback)
         return self.get_gdal_return(outputDict, context)
 
-    def run_simplify(self, inputLyr, method, tolerance, context, feedback=None, output_layer=None):
+    def run_simplify(self, input_layer, method, tolerance, context, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
-            'INPUT': inputLyr,
+            'INPUT': input_layer,
             'METHOD': method,
             'TOLERANCE': tolerance,
             'OUTPUT': output_layer}
@@ -156,14 +156,37 @@ class AlgorithmRunner():
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
-    def run_smooth(self, inputLyr, iterations, offset, max_angle, context, feedback=None, output_layer=None):
+    def run_smooth(self, input_layer, iterations, offset, max_angle, context, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
-            'INPUT': inputLyr,
+            'INPUT': input_layer,
             'ITERATIONS': iterations,
             'OFFSET': offset,
             'MAX_ANGLE': max_angle,
             'OUTPUT': output_layer}
         output = processing.run('native:smoothgeometry',
+                                parameters, context=context, feedback=feedback)
+        return output['OUTPUT']
+
+    def run_delete_field(self, input_layer, field_list, context, feedback=None, output_layer=None):
+        output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = { 
+            'COLUMN' : field_list, 
+            'INPUT' : input_layer, 
+            'OUTPUT' : output_layer }
+        output = processing.run('native:deletecolumn',
+                                parameters, context=context, feedback=feedback)
+        return output['OUTPUT']
+
+    def run_line_intersections(self, input_layer, context, feedback=None, output_layer=None):
+        output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = { 
+            'INPUT' : input_layer, 
+            'INPUT_FIELDS' : [], 
+            'INTERSECT' : input_layer, 
+            'INTERSECT_FIELDS' : [], 
+            'INTERSECT_FIELDS_PREFIX' : '', 
+            'OUTPUT' : output_layer}
+        output = processing.run('native:lineintersections',
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']

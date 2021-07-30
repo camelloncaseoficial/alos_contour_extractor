@@ -46,8 +46,8 @@ from qgis.core import (Qgis, QgsFeatureRequest,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingException)
 
-from .core.raster_handler import RasterHandler
-from .core.vector_handler import VectorHandler
+from .core.handlers.raster_handler import RasterHandler
+from .core.handlers.vector_handler import VectorHandler
 from .core.algorithms.algorithm_runner import AlgorithmRunner
 
 
@@ -235,7 +235,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
             # Stop the algorithm if cancel button has been clicked
             if feedback.isCanceled():
                 break
-            outerShellFeatList, donutHoleFeatList = vector_handler.getFeatureOuterShellAndHoles(polygons_feat, isMulti)
+            outerShellFeatList, donutHoleFeatList = vector_handler.get_feature_outershell_and_holes(polygons_feat, isMulti)
             for outerShell_feat in outerShellFeatList:
                 outershell_sink.addFeature(outerShell_feat, QgsFeatureSink.FastInsert)
             for donutHole_feat in donutHoleFeatList:
