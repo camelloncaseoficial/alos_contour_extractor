@@ -30,13 +30,24 @@ __copyright__ = '(C) 2021 by CamellOnCase'
 
 __revision__ = '$Format:%H$'
 
+import processing
+from qgis.PyQt.Qt import QVariant
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
+                       QgsWkbTypes,
+                       QgsFields,
+                       QgsField,
                        QgsFeatureSink,
                        QgsProcessingAlgorithm,
+                       QgsProcessingParameterRasterLayer,
+                       QgsProcessingParameterBand,
+                       QgsProcessingParameterNumber,
+                       QgsProcessingParameterString,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink)
-
+from .core.raster_handler import RasterHandler
+from .core.vector_handler import VectorHandler
+from .core.algorithms.algorithm_runner import AlgorithmRunner
 
 class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     """
@@ -56,8 +67,11 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     # used when calling the algorithm from another algorithm, or when
     # calling from the QGIS console.
 
-    OUTPUT = 'OUTPUT'
-    INPUT = 'INPUT'
+    RASTER_INPUT = 'RASTER_INPUT'
+    BAND_NUMBER = 'BAND_NUMBER'
+    CONTOUR_INTERVAL = 'CONTOUR_INTERVAL'
+    ELEVATION_ATTRIBUTE = 'ELEVATION_ATTRIBUTE'
+    CONTOUR = 'CONTOUR'
 
     def initAlgorithm(self, config):
         """
@@ -68,10 +82,32 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         # We add the input vector features source. It can have any kind of
         # geometry.
         self.addParameter(
-            QgsProcessingParameterFeatureSource(
-                self.INPUT,
-                self.tr('Input layer'),
-                [QgsProcessing.TypeVectorAnyGeometry]
+            QgsProcessingParameterRasterLayer(
+                self.RASTER_INPUT,
+                self.tr('Input DEM raster'),
+                [QgsProcessing.TypeRaster]
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterBand(
+                self.BAND_NUMBER,
+                self.tr('Band number'),
+                parentLayerParameterName=self.RASTER_INPUT
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.CONTOUR_INTERVAL,
+                self.tr('Interval between contour lines'),
+                type=0
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                self.ELEVATION_ATTRIBUTE,
+                self.tr('Interval between contour lines')
             )
         )
 
@@ -80,27 +116,56 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         # algorithm is run in QGIS).
         self.addParameter(
             QgsProcessingParameterFeatureSink(
-                self.OUTPUT,
-                self.tr('Output layer')
+                self.CONTOUR,
+                self.tr('Contour lines')
             )
         )
+        # self.addParameter(
+        #     QgsProcessingParameterFeatureSink(
+        #         self.DONUTHOLE,
+        #         self.tr('Donut Hole')
+        #     )
+        # )
+        # self.addParameter(
+        #     QgsProcessingParameterFeatureSink(
+        #         self.OUTPUT,
+        #         self.tr('Output layer')
+        #     )
+        # )
 
     def processAlgorithm(self, parameters, context, feedback):
         """
         Here is where the processing itself takes place.
         """
+        algo_runner = AlgorithmRunner()
+        vector_handler = VectorHandler()
 
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        source = self.parameterAsSource(parameters, self.INPUT, context)
-        (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-                context, source.fields(), source.wkbType(), source.sourceCrs())
+        input_raster_layer = self.parameterAsRasterLayer(
+            parameters, self.RASTER_INPUT, context)
+        band = self.parameterAsInt(
+            parameters, self.BAND_NUMBER, context)
+        interval = self.parameterAsDouble(
+            parameters, self.CONTOUR_INTERVAL, context)
+        elevation_attribute = self.parameterAsString(
+            parameters, self.ELEVATION_ATTRIBUTE, context)
+
+        contour_fields = QgsFields()
+        contour_fields.append(QgsField(elevation_attribute, QVariant.Double))
+
+        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR, context, contour_fields, 2, input_raster_layer.crs())
+        # output = self.parameterAsOutputLayer(parameters, self.CONTOUR, context)
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
-        total = 100.0 / source.featureCount() if source.featureCount() else 0
-        features = source.getFeatures()
+        
+        
+        outputDict = algo_runner.run_contour(input_raster_layer, band, elevation_attribute, interval, context, feedback)
+        cleaned_contour = vector_handler.retrieveSimplifiedSmoothedContour(outputDict, context, feedback)
+        total = 100.0 / cleaned_contour.featureCount() if cleaned_contour.featureCount() else 0
+        features = cleaned_contour.getFeatures()
 
         for current, feature in enumerate(features):
             # Stop the algorithm if cancel button has been clicked
@@ -119,7 +184,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         # statistics, etc. These should all be included in the returned
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
-        return {self.OUTPUT: dest_id}
+        return {self.CONTOUR: dest_id}
 
     def name(self):
         """
@@ -129,7 +194,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Contour Extractor'
+        return 'contourextractor'
 
     def displayName(self):
         """
@@ -154,6 +219,12 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         formatting characters.
         """
         return 'Contour Tools'
+
+    def shortHelpString(self):
+        """
+        Retruns a short helper string for the algorithm
+        """
+        return self.tr("""extracts the contours""")
 
     def tr(self, string):
         return QCoreApplication.translate('Processing', string)
