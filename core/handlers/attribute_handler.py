@@ -35,6 +35,7 @@ from qgis.core import (edit, Qgis, QgsFields, QgsCoordinateReferenceSystem, QgsC
 from qgis.PyQt.Qt import QObject, QVariant
 from ..algorithms.algorithm_runner import AlgorithmRunner
 
+
 class AttributeHandler(QObject):
     """
     Docstring
@@ -54,8 +55,6 @@ class AttributeHandler(QObject):
         feature[field_name] = field_value
 
         return feature
-
-
 
     def create_fields(self, elevation_attribute=None, flag=False):
         """
@@ -78,7 +77,7 @@ class AttributeHandler(QObject):
         Docstring
         :return: (QgsRectangle) raster bounding box
         """
-        output = self.algorithm_runner.run_delete_field(input_layer, field_list, context, feedback=None)
+        output = self.algorithm_runner.run_delete_field(
+            input_layer, field_list, context, feedback=feedback)
 
         return output
-

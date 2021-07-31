@@ -51,6 +51,7 @@ from .core.handlers.vector_handler import VectorHandler
 from .core.handlers.attribute_handler import AttributeHandler
 from .core.algorithms.algorithm_runner import AlgorithmRunner
 
+
 class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     """
     This is an example algorithm that takes a vector layer and
@@ -163,33 +164,39 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         elevation_attribute = self.parameterAsString(
             parameters, self.ELEVATION_ATTRIBUTE, context)
 
-        contour_fields = attribute_handler.create_fields(elevation_attribute=elevation_attribute)
+        contour_fields = attribute_handler.create_fields(
+            elevation_attribute=elevation_attribute)
         errors_fields = attribute_handler.create_fields(flag=True)
 
-        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR, context, contour_fields, 2, input_raster_layer.crs())
-        (errors_sink, errors_sink_id) = self.parameterAsSink(parameters, self.ERRORS, context, errors_fields, 1, input_raster_layer.crs())
-        
+        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
+                                               context, contour_fields, 2, input_raster_layer.crs())
+        (errors_sink, errors_sink_id) = self.parameterAsSink(parameters,
+                                                             self.ERRORS, context, errors_fields, 1, input_raster_layer.crs())
+
         multiStepFeedback.setCurrentStep(0)
         multiStepFeedback.pushInfo(self.tr('Extracting contour lines...'))
 
-        outputDict = algo_runner.run_contour(input_raster_layer, band, elevation_attribute, interval, context, feedback)
+        outputDict = algo_runner.run_contour(
+            input_raster_layer, band, elevation_attribute, interval, context, feedback)
 
         multiStepFeedback.setCurrentStep(1)
         multiStepFeedback.pushInfo(self.tr('\nSimplifying contour lines...'))
-        simplified_contour = vector_handler.retrieve_simplified_smoothed_contour(outputDict, context, feedback)
+        simplified_contour = vector_handler.retrieve_simplified_smoothed_contour(
+            outputDict, context, feedback)
 
         multiStepFeedback.setCurrentStep(2)
         multiStepFeedback.pushInfo(self.tr('\n Validating contour lines...'))
         errors = list()
-        intersection_points = algo_runner.run_line_intersections(simplified_contour, context, feedback)
+        intersection_points = algo_runner.run_line_intersections(
+            simplified_contour, context, feedback)
         errors.extend(intersection_points.getFeatures())
         # errors.extend(feat for feat in intersection_points.getFeatures())
 
         for feature in simplified_contour.getFeatures():
-            colapsed_points = vector_handler.get_out_of_bounds_angle(feature.geometry(), 10)
+            colapsed_points = vector_handler.get_out_of_bounds_angle(
+                feature.geometry(), 10)
             errors.extend(colapsed_points)
-            
-            
+
         total = 100.0 / simplified_contour.featureCount() if simplified_contour.featureCount() else 0
 
         features = simplified_contour.getFeatures()

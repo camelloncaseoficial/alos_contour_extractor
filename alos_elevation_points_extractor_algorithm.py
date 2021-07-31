@@ -139,29 +139,34 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        input_vector_layer = self.parameterAsVectorLayer(parameters, self.VECTOR_INPUT, context)
+        input_vector_layer = self.parameterAsVectorLayer(
+            parameters, self.VECTOR_INPUT, context)
 
         inputType = input_vector_layer.wkbType()
         inputCrs = input_vector_layer.sourceCrs()
         isMulti = QgsWkbTypes.isMultiType(int(inputType))
         inputFields = input_vector_layer.fields()
 
-        dem_raster = self.parameterAsRasterLayer(parameters, self.RASTER_INPUT, context)
+        dem_raster = self.parameterAsRasterLayer(
+            parameters, self.RASTER_INPUT, context)
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
                                                context, inputFields, inputType, inputCrs)
         (outershell_sink, outershell_dest_id) = self.parameterAsSink(parameters, self.OUTERSHELL,
-                context, inputFields, 6 if isMulti else 3, input_vector_layer.sourceCrs())
+                                                                     context, inputFields, 6 if isMulti else 3, input_vector_layer.sourceCrs())
         if outershell_sink is None:
-            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTERSHELL))
+            raise QgsProcessingException(
+                self.invalidSinkError(parameters, self.OUTERSHELL))
 
         (donuthole_sink, donuthole_dest_id) = self.parameterAsSink(parameters, self.DONUTHOLE,
-                context, inputFields, 6 if isMulti else 3, input_vector_layer.sourceCrs())
+                                                                   context, inputFields, 6 if isMulti else 3, input_vector_layer.sourceCrs())
         if outershell_sink is None:
-            raise QgsProcessingException(self.invalidSinkError(parameters, self.DONUTHOLE))
+            raise QgsProcessingException(
+                self.invalidSinkError(parameters, self.DONUTHOLE))
 
         donut_list = []
-        donut_layer_type = "LineString?crs={}".format(input_vector_layer.crs())    
-        donut_layer = QgsVectorLayer(donut_layer_type, "donut_layer",  "memory")
+        donut_layer_type = "LineString?crs={}".format(input_vector_layer.crs())
+        donut_layer = QgsVectorLayer(
+            donut_layer_type, "donut_layer",  "memory")
         donut_layer_provider = donut_layer.dataProvider()
 
         # Compute the number of steps to display within the progress bar and
@@ -172,19 +177,23 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         multiStepFeedback.setCurrentStep(0)
         multiStepFeedback.pushInfo(self.tr('Multi to single part'))
 
-        output = algo_runner.run_multi_to_single_part(input_vector_layer, context, feedback)
+        output = algo_runner.run_multi_to_single_part(
+            input_vector_layer, context, feedback)
 
         features = output.getFeatures()
 
         multiStepFeedback.setCurrentStep(0)
         multiStepFeedback.pushInfo(self.tr('Getting bounding box'))
-        dem_bounding_box = algo_runner.run_bounding_box_retrieve(output, context, feedback)
-        dem_boundary_buffer = algo_runner.run_buffer(dem_bounding_box, -20, context, feedback)
+        dem_bounding_box = algo_runner.run_bounding_box_retrieve(
+            output, context, feedback)
+        dem_boundary_buffer = algo_runner.run_buffer(
+            dem_bounding_box, -20, context, feedback)
 
         multiStepFeedback.setCurrentStep(0)
         multiStepFeedback.pushInfo(self.tr('Bounding box to line'))
-        dem_boundary = algo_runner.run_polygons_to_lines(dem_boundary_buffer, context, feedback)
-        
+        dem_boundary = algo_runner.run_polygons_to_lines(
+            dem_boundary_buffer, context, feedback)
+
         boundary = [feat for feat in dem_boundary.getFeatures()]
 
         multiStepFeedback.setCurrentStep(0)
@@ -199,7 +208,8 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
                 continue
             else:
                 # request = QgsFeatureRequest().setFilterRect(dem_bounding_box['OUTPUT'])
-                engine = QgsGeometry.createGeometryEngine(boundary[0].geometry().constGet())
+                engine = QgsGeometry.createGeometryEngine(
+                    boundary[0].geometry().constGet())
                 engine.prepareGeometry()
 
                 if engine.intersects(feature.geometry().constGet()):
@@ -209,7 +219,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
 
                     # Update the progress bar
                     feedback.setProgress(int(current * total))
-                
+
                 else:
                     donutHole_feat = QgsFeature()
                     # polygon = feature.geometry().coerceToType(3)
@@ -218,28 +228,31 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
                     donutHole_feat.setGeometry(poly_geom)
                     donutHole_feat.setAttributes(feature.attributes())
                     donut_layer_provider.addFeature(donutHole_feat)
-                    
+
                     # donut_feat.setAttributes(inputFields)
                     # donut_layer_provider.addFeature(donut_feat)
                     # donut_layer.commitChanges()
                     # donut_list.append(feature)
 
-        
         # donut_layer_provider.addFeatures(donut_list)
 
-        polygons = algo_runner.run_polygonize(donut_layer, context, True, feedback)
-        
+        polygons = algo_runner.run_polygonize(
+            donut_layer, context, True, feedback)
+
         polygons_feat_list = [feat for feat in polygons.getFeatures()]
 
         for current, polygons_feat in enumerate(polygons_feat_list):
             # Stop the algorithm if cancel button has been clicked
             if feedback.isCanceled():
                 break
-            outerShellFeatList, donutHoleFeatList = vector_handler.get_feature_outershell_and_holes(polygons_feat, isMulti)
+            outerShellFeatList, donutHoleFeatList = vector_handler.get_feature_outershell_and_holes(
+                polygons_feat, isMulti)
             for outerShell_feat in outerShellFeatList:
-                outershell_sink.addFeature(outerShell_feat, QgsFeatureSink.FastInsert)
+                outershell_sink.addFeature(
+                    outerShell_feat, QgsFeatureSink.FastInsert)
             for donutHole_feat in donutHoleFeatList:
-                donuthole_sink.addFeature(donutHole_feat, QgsFeatureSink.FastInsert)
+                donuthole_sink.addFeature(
+                    donutHole_feat, QgsFeatureSink.FastInsert)
 
         # Return the results of the algorithm. In this case our only result is
         # the feature sink which contains the processed features, but some
@@ -248,7 +261,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
         # return {self.OUTPUT: dest_id}
-        return {self.DONUTHOLE:donuthole_dest_id, self.OUTERSHELL:outershell_dest_id, self.OUTPUT: dest_id}
+        return {self.DONUTHOLE: donuthole_dest_id, self.OUTERSHELL: outershell_dest_id, self.OUTPUT: dest_id}
 
     def name(self):
         """
@@ -283,7 +296,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         formatting characters.
         """
         return 'Elevation Point Tools'
-    
+
     def shortHelpString(self):
         """
         Retruns a short helper string for the algorithm

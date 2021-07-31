@@ -50,15 +50,19 @@ class AlgorithmRunner():
             self.canvas = iface.mapCanvas()
 
     def generate_gdal_output(self):
-        uuid_value = str(uuid.uuid4()).replace('-','')
-        output = QgsProcessingUtils.generateTempFilename('output_{uuid}.shp'.format(uuid=uuid_value))
-        error = QgsProcessingUtils.generateTempFilename('error_{uuid}.shp'.format(uuid=uuid_value))
+        uuid_value = str(uuid.uuid4()).replace('-', '')
+        output = QgsProcessingUtils.generateTempFilename(
+            'output_{uuid}.shp'.format(uuid=uuid_value))
+        error = QgsProcessingUtils.generateTempFilename(
+            'error_{uuid}.shp'.format(uuid=uuid_value))
         return output, error
-    
-    def get_gdal_return(self, outputDict, context, returnError = False):
-        lyr = QgsProcessingUtils.mapLayerFromString(outputDict['OUTPUT'], context)
+
+    def get_gdal_return(self, outputDict, context, returnError=False):
+        lyr = QgsProcessingUtils.mapLayerFromString(
+            outputDict['OUTPUT'], context)
         if returnError:
-            errorLyr = QgsProcessingUtils.mapLayerFromString(outputDict['error'], context)
+            errorLyr = QgsProcessingUtils.mapLayerFromString(
+                outputDict['error'], context)
             return lyr, errorLyr
         else:
             return lyr
@@ -170,23 +174,23 @@ class AlgorithmRunner():
 
     def run_delete_field(self, input_layer, field_list, context, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
-        parameters = { 
-            'COLUMN' : field_list, 
-            'INPUT' : input_layer, 
-            'OUTPUT' : output_layer }
+        parameters = {
+            'COLUMN': field_list,
+            'INPUT': input_layer,
+            'OUTPUT': output_layer}
         output = processing.run('native:deletecolumn',
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
     def run_line_intersections(self, input_layer, context, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
-        parameters = { 
-            'INPUT' : input_layer, 
-            'INPUT_FIELDS' : [], 
-            'INTERSECT' : input_layer, 
-            'INTERSECT_FIELDS' : [], 
-            'INTERSECT_FIELDS_PREFIX' : '', 
-            'OUTPUT' : output_layer}
+        parameters = {
+            'INPUT': input_layer,
+            'INPUT_FIELDS': [],
+            'INTERSECT': input_layer,
+            'INTERSECT_FIELDS': [],
+            'INTERSECT_FIELDS_PREFIX': '',
+            'OUTPUT': output_layer}
         output = processing.run('native:lineintersections',
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
