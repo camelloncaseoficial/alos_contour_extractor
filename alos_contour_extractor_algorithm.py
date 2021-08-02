@@ -35,6 +35,8 @@ from qgis.PyQt.Qt import QVariant
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
                        QgsWkbTypes,
+                       QgsFields,
+                       QgsField,
                        QgsFeatureSink,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
@@ -42,7 +44,12 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterString,
                        QgsProcessingParameterFeatureSource,
-                       QgsProcessingParameterFeatureSink)
+                       QgsProcessingParameterFeatureSink,
+                       QgsProcessingMultiStepFeedback)
+from .core.handlers.raster_handler import RasterHandler
+from .core.handlers.vector_handler import VectorHandler
+from .core.handlers.attribute_handler import AttributeHandler
+from .core.algorithms.algorithm_runner import AlgorithmRunner
 
 
 class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
@@ -68,6 +75,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     CONTOUR_INTERVAL = 'CONTOUR_INTERVAL'
     ELEVATION_ATTRIBUTE = 'ELEVATION_ATTRIBUTE'
     CONTOUR = 'CONTOUR'
+    ERRORS = 'ERRORS'
 
     def initAlgorithm(self, config):
         """
@@ -103,7 +111,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 self.ELEVATION_ATTRIBUTE,
-                self.tr('Interval between contour lines')
+                self.tr('Elevation attribute name')
             )
         )
 
@@ -114,6 +122,12 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterFeatureSink(
                 self.CONTOUR,
                 self.tr('Contour lines')
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(
+                self.ERRORS,
+                self.tr('Contour lines errors')
             )
         )
         # self.addParameter(
@@ -133,11 +147,15 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         """
         Here is where the processing itself takes place.
         """
+        algo_runner = AlgorithmRunner()
+        vector_handler = VectorHandler()
+        attribute_handler = AttributeHandler()
+        multiStepFeedback = QgsProcessingMultiStepFeedback(3, feedback)
 
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        source = self.parameterAsRasterLayer(
+        input_raster_layer = self.parameterAsRasterLayer(
             parameters, self.RASTER_INPUT, context)
         band = self.parameterAsInt(
             parameters, self.BAND_NUMBER, context)
@@ -146,26 +164,46 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         elevation_attribute = self.parameterAsString(
             parameters, self.ELEVATION_ATTRIBUTE, context)
 
-        # (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
-        #                                        context, QgsWkbTypes.Linestring, source.crs())
+        contour_fields = attribute_handler.create_fields(
+            elevation_attribute=elevation_attribute)
+        errors_fields = attribute_handler.create_fields(flag=True)
 
-        # Compute the number of steps to display within the progress bar and
-        # get features from source
-        parameters = {
-            'BAND': band,
-            'CREATE_3D': False,
-            'EXTRA': '',
-            'FIELD_NAME': elevation_attribute,
-            'IGNORE_NODATA': False,
-            'INPUT': source,
-            'INTERVAL': interval,
-            'NODATA': None,
-            'OFFSET': 0,
-            'OUTPUT': 'TEMPORARY_OUTPUT'
-        }
-        outputDict = self.runClean(parameters, context, feedback)
-        total = 100.0 / outputDict.featureCount() if outputDict.featureCount() else 0
-        features = outputDict.getFeatures()
+        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
+                                               context, contour_fields, 2, input_raster_layer.crs())
+        (errors_sink, errors_sink_id) = self.parameterAsSink(parameters,
+                                                             self.ERRORS, context, errors_fields, 1, input_raster_layer.crs())
+
+        multiStepFeedback.setCurrentStep(0)
+        multiStepFeedback.pushInfo(self.tr('Extracting contour lines...'))
+
+        outputDict = algo_runner.run_contour(
+            input_raster_layer, band, elevation_attribute, interval, context, feedback)
+
+        multiStepFeedback.setCurrentStep(1)
+        multiStepFeedback.pushInfo(self.tr('\nSimplifying contour lines...'))
+        simplified_contour = vector_handler.retrieve_simplified_smoothed_contour(
+            outputDict, context, feedback)
+
+        multiStepFeedback.setCurrentStep(2)
+        multiStepFeedback.pushInfo(self.tr('\n Validating contour lines...'))
+        errors = list()
+        intersection_points = algo_runner.run_line_intersections(
+            simplified_contour, context, feedback)
+        errors.extend(intersection_points.getFeatures())
+        # errors.extend(feat for feat in intersection_points.getFeatures())
+
+        for feature in simplified_contour.getFeatures():
+            colapsed_points = vector_handler.get_out_of_bounds_angle(
+                feature.geometry(), 10)
+            errors.extend(colapsed_points)
+
+        total = 100.0 / simplified_contour.featureCount() if simplified_contour.featureCount() else 0
+
+        features = simplified_contour.getFeatures()
+        sink.addFeatures(features, QgsFeatureSink.FastInsert)
+
+        # errors = intersection_points.getFeatures()
+        errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
 
         # for current, feature in enumerate(features):
         #     # Stop the algorithm if cancel button has been clicked
@@ -178,19 +216,14 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         #     # Update the progress bar
         #     feedback.setProgress(int(current * total))
 
-        # # Return the results of the algorithm. In this case our only result is
-        # # the feature sink which contains the processed features, but some
-        # # algorithms may return multiple feature sinks, calculated numeric
-        # # statistics, etc. These should all be included in the returned
-        # # dictionary, with keys matching the feature corresponding parameter
-        # # or output names.
-        # return {self.CONTOUR: dest_id}
-
-    def runClean(self, parameters, context, feedback=None):
-
-        output = processing.run(
-            'gdal:contour', parameters, context=context, feedback=feedback)
-        return output['OUTPUT']
+        # Return the results of the algorithm. In this case our only result is
+        # the feature sink which contains the processed features, but some
+        # algorithms may return multiple feature sinks, calculated numeric
+        # statistics, etc. These should all be included in the returned
+        # dictionary, with keys matching the feature corresponding parameter
+        # or output names.
+        return {self.CONTOUR: dest_id,
+                self.ERRORS: errors_sink_id}
 
     def name(self):
         """
@@ -200,7 +233,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Contour Extractor'
+        return 'contourextractor'
 
     def displayName(self):
         """
@@ -230,9 +263,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         """
         Retruns a short helper string for the algorithm
         """
-        return self.tr('''
-        extracts the contours
-        ''')
+        return self.tr("""extracts the contours""")
 
     def tr(self, string):
         return QCoreApplication.translate('Processing', string)
