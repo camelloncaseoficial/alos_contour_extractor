@@ -106,10 +106,14 @@ class VectorHandler(QObject):
         last_simplified = self.algorithm_runner.run_simplify(
             second_smoothed, 0, 1, context, feedback=feedback)
 
-        delete_field = self.algorithm_runner.run_delete_field(
-            last_simplified, ['fid'], context, feedback=feedback)
+        if Qgis.QGIS_VERSION_INT >= 32001:
+            field_deleted = self.algorithm_runner.run_delete_field(
+                last_simplified, ['fid'], context, feedback=feedback)
+            return field_deleted
+        else:
+            self.attribute_handler.delete_fields(last_simplified, ['fid'])
 
-        return delete_field
+        return last_simplified
 
     def get_out_of_bounds_angle(self, part, angle, invalid_range=None):
 
@@ -133,8 +137,8 @@ class VectorHandler(QObject):
                 continue
             if vertex_angle < angle:
                 feature = self.create_feature(QgsGeometry.fromPointXY(line[i]))
-                self.attribute_handler.set_attribute_value(
-                    feature, 'reason', 'spike')
+                # self.attribute_handler.set_attribute_value(
+                #     feature, 'reason', 'spike')
                 off_bounds_list.append(feature)
 
         return off_bounds_list
@@ -142,3 +146,5 @@ class VectorHandler(QObject):
     def get_contour_intersection(self, contour_lines, context, feedback=None):
         intersection_points = self.algorithm_runner.run_line_intersections(
             contour_lines, context, feedback)
+        
+        return intersection_points

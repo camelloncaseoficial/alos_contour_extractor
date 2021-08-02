@@ -111,7 +111,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 self.ELEVATION_ATTRIBUTE,
-                self.tr('Interval between contour lines')
+                self.tr('Elevation attribute name')
             )
         )
 

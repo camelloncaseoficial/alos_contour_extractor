@@ -99,6 +99,20 @@ class AlgorithmRunner():
         return output['OUTPUT']
 
     def run_bounding_box_retrieve(self, inpuy_layer, context, feedback=None, output_layer=None):
+        """[summary]
+
+        :param inpuy_layer: [description]
+        :type inpuy_layer: [type]
+        :param context: [description]
+        :type context: [type]
+        :param feedback: [description], defaults to None
+        :type feedback: [type], optional
+        :param output_layer: [description], defaults to None
+        :type output_layer: [type], optional
+        :return: [description]
+        :rtype: [type]
+        """
+
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
             'INPUT': inpuy_layer,

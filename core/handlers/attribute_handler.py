@@ -72,12 +72,21 @@ class AttributeHandler(QObject):
 
         return contour_fields
 
-    def delete_fields(self, input_layer, field_list, context, feedback=None):
+    def delete_fields(self, input_layer, field_list):
         """
         Docstring
         :return: (QgsRectangle) raster bounding box
         """
-        output = self.algorithm_runner.run_delete_field(
-            input_layer, field_list, context, feedback=feedback)
+        provider = input_layer.dataProvider()
+        field_idx_list = list()
+        fields = input_layer.fields()
 
-        return output
+        for field in fields:
+            if field.name() in field_list:
+                field_idx = provider.fieldNameIndex(field.name())
+                field_idx_list.append(field_idx)
+
+        provider.deleteAttributes(field_idx_list)
+        input_layer.updateFields()         
+        
+        return input_layer
