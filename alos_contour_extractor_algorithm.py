@@ -43,6 +43,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterBand,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterString,
+                       QgsProcessingParameterBoolean,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingMultiStepFeedback)
@@ -76,6 +77,8 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     ELEVATION_ATTRIBUTE = 'ELEVATION_ATTRIBUTE'
     CONTOUR = 'CONTOUR'
     ERRORS = 'ERRORS'
+    IGNORE_PK_FIELDS = 'IGNORE_PK_FIELDS'
+    IGNORE_VIRTUAL_FIELDS = 'IGNORE_VIRTUAL_FIELDS'
 
     def initAlgorithm(self, config):
         """
@@ -98,6 +101,20 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
                 self.BAND_NUMBER,
                 self.tr('Band number'),
                 parentLayerParameterName=self.RASTER_INPUT
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.IGNORE_VIRTUAL_FIELDS,
+                self.tr('Keep original'),
+                defaultValue=True
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.IGNORE_PK_FIELDS,
+                self.tr('Simplify'),
+                defaultValue=True
             )
         )
 
@@ -197,9 +214,11 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
                 feature.geometry(), 10)
             errors.extend(colapsed_points)
 
-        total = 100.0 / simplified_contour.featureCount() if simplified_contour.featureCount() else 0
+        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, 50)
 
-        features = simplified_contour.getFeatures()
+        total = 100.0 / filtered_features.featureCount() if filtered_features.featureCount() else 0
+
+        features = filtered_features.getFeatures()
         sink.addFeatures(features, QgsFeatureSink.FastInsert)
 
         # errors = intersection_points.getFeatures()

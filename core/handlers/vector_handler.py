@@ -148,3 +148,13 @@ class VectorHandler(QObject):
             contour_lines, context, feedback)
         
         return intersection_points
+
+    def filter_geometry_by_length(self, input_layer, length):
+        for feature in input_layer.getFeatures():
+            geom = feature.geometry()
+            idx = feature.id()
+            if geom.length() <= length:
+                input_layer.deleteFeature(idx)
+            else:
+                continue
+        return input_layer

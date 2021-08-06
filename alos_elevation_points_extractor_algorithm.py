@@ -143,12 +143,14 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
             parameters, self.VECTOR_INPUT, context)
 
         inputType = input_vector_layer.wkbType()
+        
         inputCrs = input_vector_layer.sourceCrs()
         isMulti = QgsWkbTypes.isMultiType(int(inputType))
         inputFields = input_vector_layer.fields()
 
         dem_raster = self.parameterAsRasterLayer(
             parameters, self.RASTER_INPUT, context)
+
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
                                                context, inputFields, inputType, inputCrs)
         (outershell_sink, outershell_dest_id) = self.parameterAsSink(parameters, self.OUTERSHELL,
@@ -177,26 +179,28 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         multiStepFeedback.setCurrentStep(0)
         multiStepFeedback.pushInfo(self.tr('Multi to single part'))
 
+        point_pixels = algo_runner.run_pixels_to_points(dem_raster, 1, 'cota', context, feedback)
+
         output = algo_runner.run_multi_to_single_part(
             input_vector_layer, context, feedback)
 
         features = output.getFeatures()
 
-        multiStepFeedback.setCurrentStep(0)
+        multiStepFeedback.setCurrentStep(1)
         multiStepFeedback.pushInfo(self.tr('Getting bounding box'))
         dem_bounding_box = algo_runner.run_bounding_box_retrieve(
             output, context, feedback)
         dem_boundary_buffer = algo_runner.run_buffer(
             dem_bounding_box, -20, context, feedback)
 
-        multiStepFeedback.setCurrentStep(0)
+        multiStepFeedback.setCurrentStep(2)
         multiStepFeedback.pushInfo(self.tr('Bounding box to line'))
         dem_boundary = algo_runner.run_polygons_to_lines(
             dem_boundary_buffer, context, feedback)
 
         boundary = [feat for feat in dem_boundary.getFeatures()]
 
-        multiStepFeedback.setCurrentStep(0)
+        multiStepFeedback.setCurrentStep(3)
         multiStepFeedback.pushInfo(self.tr('Intersecting with boundary'))
 
         for current, feature in enumerate(features):
@@ -239,20 +243,49 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         polygons = algo_runner.run_polygonize(
             donut_layer, context, True, feedback)
 
-        polygons_feat_list = [feat for feat in polygons.getFeatures()]
+        dissolved_polygons = algo_runner.run_dissolve(polygons, context, feedback)
 
-        for current, polygons_feat in enumerate(polygons_feat_list):
+        point_pixels_list = [point for point in point_pixels.getFeatures()]
+
+        # clipped_raster = algo_runner.run_clip_raster(dem_raster, dissolved_polygons, context, feedback)
+        clipped = []
+        for current, dissolved_polygon in enumerate(dissolved_polygons.getFeatures()):
             # Stop the algorithm if cancel button has been clicked
             if feedback.isCanceled():
                 break
-            outerShellFeatList, donutHoleFeatList = vector_handler.get_feature_outershell_and_holes(
-                polygons_feat, isMulti)
-            for outerShell_feat in outerShellFeatList:
-                outershell_sink.addFeature(
-                    outerShell_feat, QgsFeatureSink.FastInsert)
-            for donutHole_feat in donutHoleFeatList:
-                donuthole_sink.addFeature(
-                    donutHole_feat, QgsFeatureSink.FastInsert)
+            else:
+                engine = QgsGeometry.createGeometryEngine(
+                    dissolved_polygon.geometry().constGet())
+                engine.prepareGeometry()
+
+                overlay_points = []
+
+                for point in point_pixels_list:
+                    if engine.intersects(point.geometry().constGet()):
+
+                        # Add a feature in the sink
+                        # sink.addFeature(feature, QgsFeatureSink.FastInsert)
+                        overlay_points.append(point)
+                        # clipped.append(max(overlay_points))
+                        # clipped.append(min(overlay_points))
+
+                        # Update the progress bar
+                        feedback.setProgress(int(current * total))
+        # outershell_sink.addFeatures(
+        #             polygons_feat_list, QgsFeatureSink.FastInsert)
+
+        # for current, polygons_feat in enumerate(polygons_feat_list):
+        #     # Stop the algorithm if cancel button has been clicked
+        #     if feedback.isCanceled():
+        #         break
+        #     outerShellFeatList, donutHoleFeatList = vector_handler.get_feature_outershell_and_holes(
+        #         polygons_feat, isMulti)
+        #     for outerShell_feat in outerShellFeatList:
+        #         outershell_sink.addFeature(
+        #             outerShell_feat, QgsFeatureSink.FastInsert)
+        #     for donutHole_feat in donutHoleFeatList:
+        #         donuthole_sink.addFeature(
+        #             donutHole_feat, QgsFeatureSink.FastInsert)
 
         # Return the results of the algorithm. In this case our only result is
         # the feature sink which contains the processed features, but some
@@ -261,7 +294,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
         # return {self.OUTPUT: dest_id}
-        return {self.DONUTHOLE: donuthole_dest_id, self.OUTERSHELL: outershell_dest_id, self.OUTPUT: dest_id}
+        return {self.DONUTHOLE: clipped_raster, self.OUTERSHELL: outershell_dest_id, self.OUTPUT: dest_id}
 
     def name(self):
         """

@@ -145,8 +145,7 @@ class AlgorithmRunner():
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
-    def run_contour(self, input_layer, band, elevation_attribute, interval, context, feedback=None, output_layer=None):
-        # output_layer = 'memory:' if output_layer is None else output_layer
+    def run_contour(self, input_layer, band, elevation_attribute, interval, context, feedback=None):
         output = QgsProcessingUtils.generateTempFilename('OUTPUT.gpkg')
         parameters = {
             'BAND': band,
@@ -162,6 +161,31 @@ class AlgorithmRunner():
         outputDict = processing.run('gdal:contour',
                                     parameters, context=context, feedback=feedback)
         return self.get_gdal_return(outputDict, context)
+
+    def run_clip_raster(self, input_raster, mask, context, feedback=None):
+        output = QgsProcessingUtils.generateTempFilename('OUTPUT.tif')
+        # output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = {
+            'ALPHA_BAND': False,
+            'CROP_TO_CUTLINE': True,
+            'DATA_TYPE': 0,
+            'EXTRA': '',
+            'KEEP_RESOLUTION': False,
+            'INPUT': input_raster,
+            'MASK': mask,
+            'MULTITHREADING': True,
+            'NODATA': None,
+            'SOURCE_CRS': None,
+            'TARGET_CRS': None,
+            'X_RESOLUTION': None,
+            'Y_RESOLUTION': None,
+            'OPTIONS': '',
+            'SET_RESOLUTION': False,
+            'OUTPUT': output}
+        outputDict = processing.run('gdal:cliprasterbymasklayer',
+                                    parameters, context=context, feedback=feedback)
+        return self.get_gdal_return(outputDict, context)
+        # return output['OUTPUT']
 
     def run_simplify(self, input_layer, method, tolerance, context, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
@@ -206,5 +230,26 @@ class AlgorithmRunner():
             'INTERSECT_FIELDS_PREFIX': '',
             'OUTPUT': output_layer}
         output = processing.run('native:lineintersections',
+                                parameters, context=context, feedback=feedback)
+        return output['OUTPUT']
+
+    def run_dissolve(self, input_layer, context, feedback=None, output_layer=None):
+        output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = {
+            'INPUT': input_layer,
+            'FIELD': [],
+            'OUTPUT': output_layer}
+        output = processing.run('native:dissolve',
+                                parameters, context=context, feedback=feedback)
+        return output['OUTPUT']
+
+    def run_pixels_to_points(self, input_raster, band, elevation_attribute, context, feedback=None, output_layer=None):
+        output_layer = 'memory:' if output_layer is None else output_layer
+        parameters = {
+            'INPUT_RASTER': input_raster,
+            'RASTER_BAND': band,
+            'FIELD_NAME': elevation_attribute,
+            'OUTPUT': output_layer}
+        output = processing.run('native:pixelstopoints',
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
