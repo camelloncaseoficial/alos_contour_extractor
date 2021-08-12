@@ -65,10 +65,6 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
     class.
     """
 
-    # Constants used to refer to parameters and outputs. They will be
-    # used when calling the algorithm from another algorithm, or when
-    # calling from the QGIS console.
-
     OUTPUT = 'OUTPUT'
     VECTOR_INPUT = 'VECTOR_INPUT'
     ELEVATION = 'ELEVATION'
@@ -82,8 +78,6 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         with some other properties.
         """
 
-        # We add the input vector features source. It can have any kind of
-        # geometry.
         self.addParameter(
             QgsProcessingParameterRasterLayer(
                 self.RASTER_INPUT,
@@ -106,9 +100,6 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
-        # We add a feature sink in which to store our processed features (this
-        # usually takes the form of a newly created vector layer when the
-        # algorithm is run in QGIS).
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTERSHELL,
@@ -136,13 +127,10 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         vector_handler = VectorHandler()
         algo_runner = AlgorithmRunner()
 
-        # Retrieve the feature source and sink. The 'dest_id' variable is used
-        # to uniquely identify the feature sink, and must be included in the
-        # dictionary returned by the processAlgorithm function.
         input_vector_layer = self.parameterAsVectorLayer(
             parameters, self.VECTOR_INPUT, context)
 
-        inputType = input_vector_layer.wkbType()
+        inputType = QgsWkbTypes.PointGeometry
         
         inputCrs = input_vector_layer.sourceCrs()
         isMulti = QgsWkbTypes.isMultiType(int(inputType))
@@ -152,7 +140,7 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
             parameters, self.RASTER_INPUT, context)
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-                                               context, inputFields, inputType, inputCrs)
+                                               context, inputFields, 1, inputCrs)
         (outershell_sink, outershell_dest_id) = self.parameterAsSink(parameters, self.OUTERSHELL,
                                                                      context, inputFields, 6 if isMulti else 3, input_vector_layer.sourceCrs())
         if outershell_sink is None:
@@ -181,22 +169,18 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
 
         point_pixels = algo_runner.run_pixels_to_points(dem_raster, 1, 'cota', context, feedback)
 
-        output = algo_runner.run_multi_to_single_part(
-            input_vector_layer, context, feedback)
+        single_contour_lines = algo_runner.run_multi_to_single_part(input_vector_layer, context, feedback)
 
-        features = output.getFeatures()
+        features = single_contour_lines.getFeatures()
 
         multiStepFeedback.setCurrentStep(1)
         multiStepFeedback.pushInfo(self.tr('Getting bounding box'))
-        dem_bounding_box = algo_runner.run_bounding_box_retrieve(
-            output, context, feedback)
-        dem_boundary_buffer = algo_runner.run_buffer(
-            dem_bounding_box, -20, context, feedback)
+        dem_bounding_box = algo_runner.run_bounding_box_retrieve(single_contour_lines, context, feedback)
+        dem_boundary_buffer = algo_runner.run_buffer(dem_bounding_box, -20, context, feedback)
 
         multiStepFeedback.setCurrentStep(2)
         multiStepFeedback.pushInfo(self.tr('Bounding box to line'))
-        dem_boundary = algo_runner.run_polygons_to_lines(
-            dem_boundary_buffer, context, feedback)
+        dem_boundary = algo_runner.run_polygons_to_lines(dem_boundary_buffer, context, feedback)
 
         boundary = [feat for feat in dem_boundary.getFeatures()]
 
@@ -212,17 +196,12 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
                 continue
             else:
                 # request = QgsFeatureRequest().setFilterRect(dem_bounding_box['OUTPUT'])
-                engine = QgsGeometry.createGeometryEngine(
-                    boundary[0].geometry().constGet())
+                engine = QgsGeometry.createGeometryEngine(boundary[0].geometry().constGet())
                 engine.prepareGeometry()
 
                 if engine.intersects(feature.geometry().constGet()):
 
-                    # Add a feature in the sink
-                    sink.addFeature(feature, QgsFeatureSink.FastInsert)
-
-                    # Update the progress bar
-                    feedback.setProgress(int(current * total))
+                   continue
 
                 else:
                     donutHole_feat = QgsFeature()
@@ -238,39 +217,47 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
                     # donut_layer.commitChanges()
                     # donut_list.append(feature)
 
-        # donut_layer_provider.addFeatures(donut_list)
+        # # donut_layer_provider.addFeatures(donut_list)
 
-        polygons = algo_runner.run_polygonize(
-            donut_layer, context, True, feedback)
+        polygons = algo_runner.run_polygonize(donut_layer, context, True, feedback)
 
         dissolved_polygons = algo_runner.run_dissolve(polygons, context, feedback)
+        single_dissolved_polygons = algo_runner.run_multi_to_single_part(dissolved_polygons, context, feedback)
 
         point_pixels_list = [point for point in point_pixels.getFeatures()]
 
-        # clipped_raster = algo_runner.run_clip_raster(dem_raster, dissolved_polygons, context, feedback)
-        clipped = []
-        for current, dissolved_polygon in enumerate(dissolved_polygons.getFeatures()):
+        # # clipped_raster = algo_runner.run_clip_raster(dem_raster, dissolved_polygons, context, feedback)
+        # clipped = []
+        dict_geom = dict()
+        for current, dissolved_polygon in enumerate(single_dissolved_polygons.getFeatures()):
             # Stop the algorithm if cancel button has been clicked
             if feedback.isCanceled():
                 break
             else:
-                engine = QgsGeometry.createGeometryEngine(
-                    dissolved_polygon.geometry().constGet())
+                engine = QgsGeometry.createGeometryEngine(dissolved_polygon.geometry().constGet())
                 engine.prepareGeometry()
 
                 overlay_points = []
-
+                points_contour = []
+                
                 for point in point_pixels_list:
                     if engine.intersects(point.geometry().constGet()):
-
-                        # Add a feature in the sink
-                        # sink.addFeature(feature, QgsFeatureSink.FastInsert)
                         overlay_points.append(point)
-                        # clipped.append(max(overlay_points))
-                        # clipped.append(min(overlay_points))
+                        points_contour.append(point['cota'])
 
-                        # Update the progress bar
-                        feedback.setProgress(int(current * total))
+                dict_geom[dissolved_polygon] = (overlay_points, points_contour)
+        new_dict = dict()
+        # for polyGeom, pointList in dict_geom.items():
+        #     max_contour = max(pointList[1])
+        #     max_contour_point = pointList[0][pointList[1].index(max_contour)]
+        #     min_contour = min(pointList[1])
+        #     min_contour_point = pointList[0][pointList[1].index(min_contour)]
+        #     new_dict[poly_geom] = [min_contour_point, max_contour_point]
+
+        # for polyGeom, minMax in new_dict.items():
+        #     sink.addFeatures(minMax, QgsFeatureSink.FastInsert)
+        #                 # Update the progress bar
+        #                 feedback.setProgress(int(current * total))
         # outershell_sink.addFeatures(
         #             polygons_feat_list, QgsFeatureSink.FastInsert)
 
@@ -293,8 +280,8 @@ class DemElevationPointsExtractorAlgorithm(QgsProcessingAlgorithm):
         # statistics, etc. These should all be included in the returned
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
-        # return {self.OUTPUT: dest_id}
-        return {self.DONUTHOLE: clipped_raster, self.OUTERSHELL: outershell_dest_id, self.OUTPUT: dest_id}
+        return {self.OUTPUT: dest_id}
+        # return {self.DONUTHOLE: clipped_raster, self.OUTERSHELL: outershell_dest_id, self.OUTPUT: dest_id}
 
     def name(self):
         """
