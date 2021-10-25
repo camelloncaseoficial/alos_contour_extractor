@@ -1,7 +1,7 @@
 #/***************************************************************************
-# AlosContourExtractor
+# DTM Tools
 #
-# Creates contour and elevation points from Alos Palsar DEM
+# Creates contour and elevation points from DTM Tools
 #							 -------------------
 #		begin				: 2021-07-20
 #		git sha				: $Format:%H$
@@ -38,13 +38,13 @@ LOCALES =
 # translation
 SOURCES = \
 	__init__.py \
-	alos_contour_extractor.py 
+	dtm_tools_plugin.py 
 
-PLUGINNAME = alos_contour_extractor
+PLUGINNAME = dtm_tools_plugin
 
 PY_FILES = \
 	__init__.py \
-	alos_contour_extractor.py 
+	dtm_tools_plugin.py 
 
 UI_FILES = 
 

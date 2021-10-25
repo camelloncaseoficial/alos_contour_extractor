@@ -35,7 +35,7 @@ import sys
 import inspect
 
 from qgis.core import QgsProcessingAlgorithm, QgsApplication
-from .alos_contour_extractor_provider import AlosContourExtractorProvider
+from .dtm_tools_provider import DtmToolsProvider
 
 cmd_folder = os.path.split(inspect.getfile(inspect.currentframe()))[0]
 
@@ -43,14 +43,14 @@ if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
 
-class AlosContourExtractorPlugin(object):
+class DtmToolsPlugin(object):
 
     def __init__(self):
         self.provider = None
 
     def initProcessing(self):
         """Init Processing provider for QGIS >= 3.8."""
-        self.provider = AlosContourExtractorProvider()
+        self.provider = DtmToolsProvider()
         QgsApplication.processingRegistry().addProvider(self.provider)
 
     def initGui(self):

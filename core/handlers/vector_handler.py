@@ -94,15 +94,21 @@ class VectorHandler(QObject):
 
     def retrieve_simplified_smoothed_contour(self, contour_lines, context, feedback=None):
 
+        index = QgsSpatialIndex(contour_lines.getFeatures())
+        
+        feedback.pushInfo(self.tr('\nSmoothing...'))
         smoothed = self.algorithm_runner.run_smooth(
             contour_lines, 2, 0.3, 180, context, feedback=feedback)
 
+        feedback.pushInfo(self.tr('\nSimplifying...'))
         first_simplified = self.algorithm_runner.run_simplify(
             smoothed, 0, 2, context, feedback=feedback)
 
+        feedback.pushInfo(self.tr('\nSmoothing another time...'))
         second_smoothed = self.algorithm_runner.run_smooth(
             first_simplified, 3, 0.3, 180, context, feedback=feedback)
 
+        feedback.pushInfo(self.tr('\nSimplifying again...'))
         last_simplified = self.algorithm_runner.run_simplify(
             second_smoothed, 0, 1, context, feedback=feedback)
 
@@ -148,3 +154,25 @@ class VectorHandler(QObject):
             contour_lines, context, feedback)
         
         return intersection_points
+
+    def filter_geometry_by_length(self, input_layer):
+        expression = '$length < 100'
+        request = QgsFeatureRequest().setFilterExpression(expression)
+        to_delete = list()
+
+        for feature in input_layer.getFeatures(request):
+            to_delete.append(feature.id())
+        
+        # tratar exceção
+        res_layer = input_layer.dataProvider().deleteFeatures(to_delete)
+        return input_layer
+
+    def spatial_index_applier(self, layer):
+        index = QgsSpatialIndex()
+
+        for feature in layer.getFeatures():
+            index.addFeature(feature)
+
+
+        return True
+    
