@@ -31,11 +31,10 @@ __copyright__ = '(C) 2021 by CamellOnCase'
 __revision__ = '$Format:%H$'
 
 from qgis.core import QgsProcessingProvider
-from .alos_contour_extractor_algorithm import AlosContourExtractorAlgorithm
-from .alos_elevation_points_extractor_algorithm import DemElevationPointsExtractorAlgorithm
+from .dtm_contour_extractor_algorithm import DtmContourExtractorAlgorithm
 
 
-class AlosContourExtractorProvider(QgsProcessingProvider):
+class DtmToolsProvider(QgsProcessingProvider):
 
     def __init__(self):
         """
@@ -54,10 +53,7 @@ class AlosContourExtractorProvider(QgsProcessingProvider):
         """
         Loads all algorithms belonging to this provider.
         """
-        self.addAlgorithm(AlosContourExtractorAlgorithm())
-        self.addAlgorithm(DemElevationPointsExtractorAlgorithm())
-        # add additional algorithms here
-        # self.addAlgorithm(MyOtherAlgorithm())
+        self.addAlgorithm(DtmContourExtractorAlgorithm())
 
     def id(self):
         """
@@ -65,16 +61,15 @@ class AlosContourExtractorProvider(QgsProcessingProvider):
         string should be a unique, short, character only string, eg "qgis" or
         "gdal". This string should not be localised.
         """
-        return 'demtools'
+        return 'dtmtools'
 
     def name(self):
         """
         Returns the provider name, which is used to describe the provider
         within the GUI.
-
         This string should be short (e.g. "Lastools") and localised.
         """
-        return self.tr('Alos Palsar Tools')
+        return self.tr('DTM Tools')
 
     def icon(self):
         """
