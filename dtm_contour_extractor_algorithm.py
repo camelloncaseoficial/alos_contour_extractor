@@ -37,6 +37,7 @@ from qgis.core import (QgsProcessing,
                        QgsWkbTypes,
                        QgsFields,
                        QgsField,
+                       QgsVectorLayer,
                        QgsFeatureSink,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
@@ -53,7 +54,7 @@ from .core.handlers.attribute_handler import AttributeHandler
 from .core.algorithms.algorithm_runner import AlgorithmRunner
 
 
-class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
+class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
     """
     This is an example algorithm that takes a vector layer and
     creates a new identical one.
@@ -77,8 +78,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
     ELEVATION_ATTRIBUTE = 'ELEVATION_ATTRIBUTE'
     CONTOUR = 'CONTOUR'
     ERRORS = 'ERRORS'
-    IGNORE_PK_FIELDS = 'IGNORE_PK_FIELDS'
-    IGNORE_VIRTUAL_FIELDS = 'IGNORE_VIRTUAL_FIELDS'
+    KEEP_ORIGINAL = 'KEEP_ORIGINAL'
 
     def initAlgorithm(self, config):
         """
@@ -105,36 +105,26 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         )
         self.addParameter(
             QgsProcessingParameterBoolean(
-                self.IGNORE_VIRTUAL_FIELDS,
+                self.KEEP_ORIGINAL,
                 self.tr('Keep original'),
-                defaultValue=True
+                defaultValue=False
             )
         )
-        self.addParameter(
-            QgsProcessingParameterBoolean(
-                self.IGNORE_PK_FIELDS,
-                self.tr('Simplify'),
-                defaultValue=True
-            )
-        )
-
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.CONTOUR_INTERVAL,
                 self.tr('Interval between contour lines'),
-                type=0
+                type=0,
+                defaultValue=10
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 self.ELEVATION_ATTRIBUTE,
-                self.tr('Elevation attribute name')
+                self.tr('Elevation attribute name'),
+                defaultValue='ELEV'
             )
         )
-
-        # We add a feature sink in which to store our processed features (this
-        # usually takes the form of a newly created vector layer when the
-        # algorithm is run in QGIS).
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.CONTOUR,
@@ -147,18 +137,6 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
                 self.tr('Contour lines errors')
             )
         )
-        # self.addParameter(
-        #     QgsProcessingParameterFeatureSink(
-        #         self.DONUTHOLE,
-        #         self.tr('Donut Hole')
-        #     )
-        # )
-        # self.addParameter(
-        #     QgsProcessingParameterFeatureSink(
-        #         self.OUTPUT,
-        #         self.tr('Output layer')
-        #     )
-        # )
 
     def processAlgorithm(self, parameters, context, feedback):
         """
@@ -167,15 +145,16 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         algo_runner = AlgorithmRunner()
         vector_handler = VectorHandler()
         attribute_handler = AttributeHandler()
-        multiStepFeedback = QgsProcessingMultiStepFeedback(3, feedback)
+        multi_step_feedback = QgsProcessingMultiStepFeedback(5, feedback)
+        contour_lines = QgsVectorLayer()
 
-        # Retrieve the feature source and sink. The 'dest_id' variable is used
-        # to uniquely identify the feature sink, and must be included in the
-        # dictionary returned by the processAlgorithm function.
         input_raster_layer = self.parameterAsRasterLayer(
             parameters, self.RASTER_INPUT, context)
+        input_crs = input_raster_layer.crs()
         band = self.parameterAsInt(
             parameters, self.BAND_NUMBER, context)
+        keep_original = self.parameterAsBool(
+            parameters, self.KEEP_ORIGINAL, context)
         interval = self.parameterAsDouble(
             parameters, self.CONTOUR_INTERVAL, context)
         elevation_attribute = self.parameterAsString(
@@ -185,62 +164,63 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
             elevation_attribute=elevation_attribute)
         errors_fields = attribute_handler.create_fields(flag=True)
 
-        (sink, dest_id) = self.parameterAsSink(parameters, self.CONTOUR,
-                                               context, contour_fields, 2, input_raster_layer.crs())
+        (sink, dest_id) = self.parameterAsSink(parameters,
+                                               self.CONTOUR,
+                                               context,
+                                               contour_fields,
+                                               2,
+                                               input_crs)
+
         (errors_sink, errors_sink_id) = self.parameterAsSink(parameters,
-                                                             self.ERRORS, context, errors_fields, 1, input_raster_layer.crs())
+                                                             self.ERRORS,
+                                                             context,
+                                                             errors_fields,
+                                                             1,
+                                                             input_crs)
 
-        multiStepFeedback.setCurrentStep(0)
-        multiStepFeedback.pushInfo(self.tr('Extracting contour lines...'))
+        
+        multi_step_feedback.setCurrentStep(0)
+        multi_step_feedback.pushInfo(self.tr('Extracting contour lines...'))
 
-        outputDict = algo_runner.run_contour(
-            input_raster_layer, band, elevation_attribute, interval, context, feedback)
+        contour_lines = algo_runner.run_contour(input_raster_layer,
+                                            band,
+                                            elevation_attribute,
+                                            interval,
+                                            context, feedback)
 
-        multiStepFeedback.setCurrentStep(1)
-        multiStepFeedback.pushInfo(self.tr('\nSimplifying contour lines...'))
+        if keep_original:
+            features = contour_lines.getFeatures()
+            sink.addFeatures(features, QgsFeatureSink.FastInsert)
+
+            return {self.CONTOUR: dest_id}
+        
+        multi_step_feedback.setCurrentStep(1)
         simplified_contour = vector_handler.retrieve_simplified_smoothed_contour(
-            outputDict, context, feedback)
+            contour_lines, context, multi_step_feedback)
 
-        multiStepFeedback.setCurrentStep(2)
-        multiStepFeedback.pushInfo(self.tr('\n Validating contour lines...'))
+        multi_step_feedback.setCurrentStep(2)
+        multi_step_feedback.pushInfo(self.tr('\n Retrieving intersected contour lines...'))
         errors = list()
         intersection_points = algo_runner.run_line_intersections(
             simplified_contour, context, feedback)
         errors.extend(intersection_points.getFeatures())
-        # errors.extend(feat for feat in intersection_points.getFeatures())
 
+        multi_step_feedback.setCurrentStep(3)
+        multi_step_feedback.pushInfo(self.tr('\n Retrieving colapsed contour lines...'))
         for feature in simplified_contour.getFeatures():
             colapsed_points = vector_handler.get_out_of_bounds_angle(
                 feature.geometry(), 10)
             errors.extend(colapsed_points)
 
-        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, 50)
-
-        total = 100.0 / filtered_features.featureCount() if filtered_features.featureCount() else 0
+        multi_step_feedback.setCurrentStep(4)
+        multi_step_feedback.pushInfo(self.tr('Filtering contour lines...\n'))
+        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour)
 
         features = filtered_features.getFeatures()
         sink.addFeatures(features, QgsFeatureSink.FastInsert)
 
-        # errors = intersection_points.getFeatures()
         errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
 
-        # for current, feature in enumerate(features):
-        #     # Stop the algorithm if cancel button has been clicked
-        #     if feedback.isCanceled():
-        #         break
-
-        #     # Add a feature in the sink
-        #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
-
-        #     # Update the progress bar
-        #     feedback.setProgress(int(current * total))
-
-        # Return the results of the algorithm. In this case our only result is
-        # the feature sink which contains the processed features, but some
-        # algorithms may return multiple feature sinks, calculated numeric
-        # statistics, etc. These should all be included in the returned
-        # dictionary, with keys matching the feature corresponding parameter
-        # or output names.
         return {self.CONTOUR: dest_id,
                 self.ERRORS: errors_sink_id}
 
@@ -259,7 +239,7 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         Returns the translated algorithm name, which should be used for any
         user-visible display of the algorithm name.
         """
-        return self.tr(self.name())
+        return self.tr('Contour Extractor')
 
     def group(self):
         """
@@ -288,4 +268,4 @@ class AlosContourExtractorAlgorithm(QgsProcessingAlgorithm):
         return QCoreApplication.translate('Processing', string)
 
     def createInstance(self):
-        return AlosContourExtractorAlgorithm()
+        return DtmContourExtractorAlgorithm()
