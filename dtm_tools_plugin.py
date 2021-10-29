@@ -26,7 +26,7 @@ __author__ = 'CamellOnCase'
 __date__ = '2021-07-20'
 __copyright__ = '(C) 2021 by CamellOnCase'
 
-# This will get replaced with a git SHA1 when you do a git archive
+# This will get replaced with a git SHA1 when you do a git archives
 
 __revision__ = '$Format:%H$'
 
