@@ -207,6 +207,8 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
 
         multi_step_feedback.setCurrentStep(3)
         multi_step_feedback.pushInfo(self.tr('\n Retrieving colapsed contour lines...'))
+
+        #verificar acho que tá rodando o processo toda vez para cada feição
         for feature in simplified_contour.getFeatures():
             colapsed_points = vector_handler.get_out_of_bounds_angle(
                 feature.geometry(), 10)
@@ -214,6 +216,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
 
         multi_step_feedback.setCurrentStep(4)
         multi_step_feedback.pushInfo(self.tr('Filtering contour lines...\n'))
+
         filtered_features = vector_handler.filter_geometry_by_length(simplified_contour)
 
         features = filtered_features.getFeatures()
