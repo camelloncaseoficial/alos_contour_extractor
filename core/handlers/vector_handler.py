@@ -165,7 +165,7 @@ class VectorHandler(QObject):
         
         # tratar exceção
         res_layer = input_layer.dataProvider().deleteFeatures(to_delete)
-        return res_layer
+        return input_layer
 
     def spatial_index_applier(self, layer):
         index = QgsSpatialIndex()

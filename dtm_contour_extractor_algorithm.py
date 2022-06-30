@@ -259,7 +259,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
         contain lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Contour Tools'
+        return 'Extractor Tools'
 
     def shortHelpString(self):
         """
