@@ -47,19 +47,18 @@ class AttributeHandler(QObject):
         self.iface = iface
         if iface:
             self.canvas = iface.mapCanvas()
-        # self.featureHandler = FeatureHandler(iface)
-        # self.geometryHandler = GeometryHandler(iface)
         self.algorithm_runner = AlgorithmRunner()
 
-    def set_attribute_value(self, feature, field_name, field_value):
+    @staticmethod
+    def set_attribute_value(feature, field_name, field_value):
         feature[field_name] = field_value
 
         return feature
 
-    def create_fields(self, elevation_attribute=None, flag=False):
+    @staticmethod
+    def create_fields(elevation_attribute=None, flag=False):
         """
         Docstring
-        :return: (QgsRectangle) raster bounding box
         """
         contour_fields = QgsFields()
 
@@ -72,7 +71,8 @@ class AttributeHandler(QObject):
 
         return contour_fields
 
-    def delete_fields(self, input_layer, field_list):
+    @staticmethod
+    def delete_fields(input_layer, field_list):
         """
         Docstring
         :return: (QgsRectangle) raster bounding box

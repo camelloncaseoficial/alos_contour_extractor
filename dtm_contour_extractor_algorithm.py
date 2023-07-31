@@ -30,6 +30,8 @@ __copyright__ = '(C) 2021 by CamellOnCase'
 
 __revision__ = '$Format:%H$'
 
+import time
+
 import processing
 from qgis.PyQt.Qt import QVariant
 from qgis.PyQt.QtCore import QCoreApplication
@@ -79,6 +81,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
     CONTOUR = 'CONTOUR'
     ERRORS = 'ERRORS'
     KEEP_ORIGINAL = 'KEEP_ORIGINAL'
+    TOPOLOGY_CHECK = 'TOPOLOGY_CHECK'
 
     def initAlgorithm(self, config):
         """
@@ -107,6 +110,13 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterBoolean(
                 self.KEEP_ORIGINAL,
                 self.tr('Keep original'),
+                defaultValue=False
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.TOPOLOGY_CHECK,
+                self.tr('Topology check'),
                 defaultValue=False
             )
         )
@@ -155,6 +165,8 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             parameters, self.BAND_NUMBER, context)
         keep_original = self.parameterAsBool(
             parameters, self.KEEP_ORIGINAL, context)
+        topology_check = self.parameterAsBool(
+            parameters, self.TOPOLOGY_CHECK, context)
         interval = self.parameterAsDouble(
             parameters, self.CONTOUR_INTERVAL, context)
         elevation_attribute = self.parameterAsString(
@@ -178,54 +190,60 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
                                                              1,
                                                              input_crs)
 
-        
         multi_step_feedback.setCurrentStep(0)
         multi_step_feedback.pushInfo(self.tr('Extracting contour lines...'))
 
         contour_lines = algo_runner.run_contour(input_raster_layer,
-                                            band,
-                                            elevation_attribute,
-                                            interval,
-                                            context, feedback)
+                                                band,
+                                                elevation_attribute,
+                                                interval,
+                                                context, feedback)
 
         if keep_original:
             features = contour_lines.getFeatures()
             sink.addFeatures(features, QgsFeatureSink.FastInsert)
 
             return {self.CONTOUR: dest_id}
-        
+
         multi_step_feedback.setCurrentStep(1)
         simplified_contour = vector_handler.retrieve_simplified_smoothed_contour(
-            contour_lines, context, multi_step_feedback)
+            contour_lines, input_crs, context, multi_step_feedback)
+        print("Simplified contours:", time.strftime("%H:%M:%S", time.localtime()))
 
         multi_step_feedback.setCurrentStep(2)
-        multi_step_feedback.pushInfo(self.tr('\n Retrieving intersected contour lines...'))
-        errors = list()
-        intersection_points = algo_runner.run_line_intersections(
-            simplified_contour, context, feedback)
-        errors.extend(intersection_points.getFeatures())
-
-        multi_step_feedback.setCurrentStep(3)
-        multi_step_feedback.pushInfo(self.tr('\n Retrieving colapsed contour lines...'))
-
-        #verificar acho que tá rodando o processo toda vez para cada feição
-        for feature in simplified_contour.getFeatures():
-            colapsed_points = vector_handler.get_out_of_bounds_angle(
-                feature.geometry(), 10)
-            errors.extend(colapsed_points)
-
-        multi_step_feedback.setCurrentStep(4)
         multi_step_feedback.pushInfo(self.tr('Filtering contour lines...\n'))
 
-        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour)
+        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, input_crs)
+        print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
+        if topology_check:
+            errors = list()
+            multi_step_feedback.setCurrentStep(2)
+            multi_step_feedback.pushInfo(self.tr('\n Retrieving intersected contour lines...'))
 
-        features = filtered_features.getFeatures()
-        sink.addFeatures(features, QgsFeatureSink.FastInsert)
+            intersection_points = algo_runner.run_line_intersections(
+                simplified_contour, context, feedback)
+            errors.extend(intersection_points.getFeatures())
+            print("Intersected contours:", time.strftime("%H:%M:%S", time.localtime()))
 
-        errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
+            multi_step_feedback.setCurrentStep(3)
+            multi_step_feedback.pushInfo(self.tr('\n Retrieving collapsed contour lines...'))
+            print(time.strftime("%H:%M:%S", time.localtime()))
+            # verificar acho que tá rodando o processo toda vez para cada feição
+            for feature in filtered_features.getFeatures():
+                collapsed_points = vector_handler.get_out_of_bounds_angle(
+                    feature.geometry(), 10)
+                errors.extend(collapsed_points)
+            print("Collapsed contours:", time.strftime("%H:%M:%S", time.localtime()))
 
-        return {self.CONTOUR: dest_id,
-                self.ERRORS: errors_sink_id}
+            sink.addFeatures(filtered_features.getFeatures(), QgsFeatureSink.FastInsert)
+            errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
+
+            return {self.CONTOUR: dest_id, self.ERRORS: errors_sink_id}
+
+        else:
+            sink.addFeatures(filtered_features.getFeatures(), QgsFeatureSink.FastInsert)
+
+            return {self.CONTOUR: dest_id}
 
     def name(self):
         """
