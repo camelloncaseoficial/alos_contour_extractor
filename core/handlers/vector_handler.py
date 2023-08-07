@@ -31,7 +31,7 @@ import numpy as np
 import processing
 from qgis.analysis import QgsGeometrySnapper, QgsInternalGeometrySnapper
 from qgis.core import (edit, Qgis, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsExpression, QgsFeature, QgsFeatureRequest, QgsField, QgsGeometry, QgsMessageLog,
+                       QgsExpression, QgsFeature, QgsFeatureRequest, QgsField, QgsFields, QgsGeometry, QgsMessageLog,
                        QgsProcessingContext, QgsProcessingMultiStepFeedback, QgsProcessingUtils, QgsProject,
                        QgsSpatialIndex, QgsVectorDataProvider, QgsVectorLayer, QgsVectorLayerUtils, QgsWkbTypes,
                        QgsProcessingFeatureSourceDefinition, QgsFeatureSink)
@@ -39,7 +39,7 @@ from qgis.PyQt.Qt import QObject, QVariant
 from ..algorithms.algorithm_runner import AlgorithmRunner
 from .attribute_handler import AttributeHandler
 from ..util.dtm_tools_utils import SMOOTH_TOLERANCE, SIMPLIFICATION_METHOD, FIRST_SIMPLIFY_TOLERANCE, \
-    SECOND_SIMPLIFY_TOLERANCE, GEOGRAPHIC_CONSTANT, MAX_NODE_ANGLE
+    SECOND_SIMPLIFY_TOLERANCE, GEOGRAPHIC_CONSTANT, MAX_NODE_ANGLE, COUNTER
 
 
 class VectorHandler(QObject):
@@ -62,20 +62,17 @@ class VectorHandler(QObject):
         self.simplification_method = SIMPLIFICATION_METHOD
         self.max_node_angle = MAX_NODE_ANGLE
 
-    @staticmethod
-    def create_feature(geometry, fields=None, set_attributes=False):
+    def create_feature(self, geometry, attribute_value, error=False):
+        # fields_maps = self.attribute_handler.create_fields(True)
         feature = QgsFeature()
         feature.setGeometry(geometry)
-        if set_attributes:
-            feature.setAttributes(fields)
+
+        if error:
+            feature.setFields(self.attribute_handler.create_fields(None, True))
+            feature[0] = attribute_value
 
         return feature
 
-    @staticmethod
-    def populate_feature_attribute(features, attribute_name, attribute_value):
-        for feature in features:
-            feature[attribute_name] = attribute_value
-        return features
     def get_outershell_and_holes(self, geom, isMulti):
         outershells, donutholes = [], []
         for part in geom.asGeometryCollection():
@@ -107,7 +104,7 @@ class VectorHandler(QObject):
             donutHoleList.append(newFeat)
         return outershellList, donutHoleList
 
-    def retrieve_simplified_smoothed_contour(self, contour_lines, input_crs, context, feedback=None):
+    def retrieve_simplified_smoothed_contour(self, contour_lines, input_crs, context=None, feedback=None):
 
         """
         Retrieve simplified and smoothed contour lines.
@@ -130,20 +127,19 @@ class VectorHandler(QObject):
         feedback.pushInfo(self.tr('\nSimplifying and smoothing contours...'))
 
         smoothed = self.algorithm_runner.run_smooth(
-            contour_lines, 2, self.smooth_tolerance, self.max_node_angle, context, feedback=feedback)
+            contour_lines, 2, self.smooth_tolerance, self.max_node_angle)
 
         first_simplified = self.algorithm_runner.run_simplify(
-            smoothed, self.simplification_method, self.first_simplify_tolerance, context, feedback=feedback)
+            smoothed, self.simplification_method, self.first_simplify_tolerance)
 
         second_smoothed = self.algorithm_runner.run_smooth(
-            first_simplified, 3, self.smooth_tolerance, self.max_node_angle, context, feedback=feedback)
+            first_simplified, 3, self.smooth_tolerance, self.max_node_angle)
 
         last_simplified = self.algorithm_runner.run_simplify(
-            second_smoothed, self.simplification_method, self.second_simplify_tolerance, context, feedback=feedback)
+            second_smoothed, self.simplification_method, self.second_simplify_tolerance)
 
         if Qgis.QGIS_VERSION_INT >= 32001:
-            return self.algorithm_runner.run_delete_field(
-                last_simplified, ['fid'], context, feedback=feedback)
+            return self.algorithm_runner.run_delete_field(last_simplified, ['fid'])
         else:
             return self.attribute_handler.delete_fields(last_simplified, ['fid'])
 
@@ -159,33 +155,32 @@ class VectorHandler(QObject):
         self.second_simplify_tolerance /= self.geographic_constant
 
     def get_out_of_bounds_angle(self, part, angle, invalid_range=None):
-
+        min_angle, max_angle = 0, 0
         off_bounds_list = list()
 
         if invalid_range is not None:
-            minAngle, maxAngle = invalid_range
+            min_angle, max_angle = invalid_range
 
         line = part.asPolyline()
-        nVertex = len(line) - 1
+        number_of_vertex = len(line) - 1
 
-        for i in range(1, nVertex):
-            vertex_angle = (line[i].azimuth(line[i - 1]) -
-                            line[i].azimuth(line[i + 1]) + 360)
+        for i in range(1, number_of_vertex):
+            vertex_angle = (line[i].azimuth(line[i - 1]) - line[i].azimuth(line[i + 1]) + 360)
             vertex_angle = math.fmod(vertex_angle, 360)
+
             if vertex_angle > 180:
                 vertex_angle = 360 - vertex_angle
-            if invalid_range is not None and (vertex_angle >= minAngle and vertex_angle <= maxAngle):
-                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]), ['check'], True)
+
+            if invalid_range is not None and (min_angle <= vertex_angle <= max_angle):
+                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]), 'out of bounds angle', True)
                 off_bounds_list.append(feature)
                 continue
+
             if vertex_angle < angle:
-                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]), ['check'], True)
-                # self.attribute_handler.set_attribute_value(
-                #     feature, 'reason', 'spike')
+                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]), 'out of bounds angle', True)
                 off_bounds_list.append(feature)
 
-        return self. populate_feature_attribute(off_bounds_list, 'check', 'out of bounds angle')
-
+        return off_bounds_list
 
     def numpy_get_out_of_bounds_angle(self, part, angle, invalid_range=None):
         """
@@ -240,6 +235,8 @@ class VectorHandler(QObject):
         intersection_points = self.algorithm_runner.run_line_intersections(
             contour_lines, context, feedback)
 
+        print('intersection_points: ', type(intersection_points))
+
         return intersection_points
 
     def filter_geometry_by_length(self, input_layer, input_crs):
@@ -252,11 +249,20 @@ class VectorHandler(QObject):
         to_delete = list()
 
         for feature in input_layer.getFeatures(request):
-            to_delete.append(feature.id())
-
+            feature.setFields(self.attribute_handler.create_fields(None, True))
+            feature[0] = f'contour line with length below tolerance {feature.geometry().length()}'
+            to_delete.append(feature)
+        print(to_delete)
         # tratar exceção
         res_layer = input_layer.dataProvider().deleteFeatures(to_delete)
-        return input_layer
+        return input_layer, to_delete
+
+    def delete_features(self, input_layer, feature_list):
+        to_delete = list()
+        for feature in feature_list:
+            to_delete.append(feature.id())
+
+        return input_layer.dataProvider().deleteFeatures(to_delete)
 
     def spatial_index_applier(self, layer):
         index = QgsSpatialIndex()
