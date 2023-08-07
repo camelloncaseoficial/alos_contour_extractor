@@ -47,32 +47,33 @@ class AttributeHandler(QObject):
         self.iface = iface
         if iface:
             self.canvas = iface.mapCanvas()
-        # self.featureHandler = FeatureHandler(iface)
-        # self.geometryHandler = GeometryHandler(iface)
         self.algorithm_runner = AlgorithmRunner()
 
-    def set_attribute_value(self, feature, field_name, field_value):
+    @staticmethod
+    def set_attribute_value(feature, field_name, field_value):
         feature[field_name] = field_value
 
         return feature
 
-    def create_fields(self, elevation_attribute=None, flag=False):
+    @staticmethod
+    def create_fields(elevation_attribute=None, error=False):
         """
         Docstring
-        :return: (QgsRectangle) raster bounding box
         """
-        contour_fields = QgsFields()
+        fields_map = QgsFields()
 
-        if flag:
-            contour_fields.append(QgsField('reason', QVariant.Int))
-            return contour_fields
+        if error:
+            # fields_map.append(QgsField('id', QVariant.Int))
+            fields_map.append(QgsField('check', QVariant.String))
+            return fields_map
 
-        contour_fields.append(QgsField('Id', QVariant.Int))
-        contour_fields.append(QgsField(elevation_attribute, QVariant.Double))
+        fields_map.append(QgsField('id', QVariant.Int))
+        fields_map.append(QgsField(elevation_attribute, QVariant.Double))
 
-        return contour_fields
+        return fields_map
 
-    def delete_fields(self, input_layer, field_list):
+    @staticmethod
+    def delete_fields(input_layer, field_list):
         """
         Docstring
         :return: (QgsRectangle) raster bounding box

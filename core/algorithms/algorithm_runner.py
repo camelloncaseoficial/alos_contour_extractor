@@ -187,7 +187,7 @@ class AlgorithmRunner():
         return self.get_gdal_return(outputDict, context)
         # return output['OUTPUT']
 
-    def run_simplify(self, input_layer, method, tolerance, context, feedback=None, output_layer=None):
+    def run_simplify(self, input_layer, method, tolerance, context=None, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
             'INPUT': input_layer,
@@ -198,7 +198,7 @@ class AlgorithmRunner():
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
-    def run_smooth(self, input_layer, iterations, offset, max_angle, context, feedback=None, output_layer=None):
+    def run_smooth(self, input_layer, iterations, offset, max_angle, context=None, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
             'INPUT': input_layer,
@@ -210,7 +210,7 @@ class AlgorithmRunner():
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
-    def run_delete_field(self, input_layer, field_list, context, feedback=None, output_layer=None):
+    def run_delete_field(self, input_layer, field_list, context=None, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
             'COLUMN': field_list,
@@ -220,7 +220,7 @@ class AlgorithmRunner():
                                 parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
-    def run_line_intersections(self, input_layer, context, feedback=None, output_layer=None):
+    def run_line_intersections(self, input_layer, context=None, feedback=None, output_layer=None):
         output_layer = 'memory:' if output_layer is None else output_layer
         parameters = {
             'INPUT': input_layer,
