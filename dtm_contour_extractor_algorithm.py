@@ -210,11 +210,6 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             contour_lines, input_crs, context, multi_step_feedback)
         print("Simplified contours:", time.strftime("%H:%M:%S", time.localtime()))
 
-        multi_step_feedback.setCurrentStep(2)
-        multi_step_feedback.pushInfo(self.tr('Filtering contour lines...\n'))
-
-        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, input_crs)
-        print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
         if topology_check:
             errors = list()
             multi_step_feedback.setCurrentStep(2)
@@ -229,11 +224,17 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             multi_step_feedback.pushInfo(self.tr('\n Retrieving collapsed contour lines...'))
             print(time.strftime("%H:%M:%S", time.localtime()))
             # verificar acho que tá rodando o processo toda vez para cada feição
-            for feature in filtered_features.getFeatures():
+            for feature in simplified_contour.getFeatures():
                 collapsed_points = vector_handler.get_out_of_bounds_angle(
                     feature.geometry(), 10)
                 errors.extend(collapsed_points)
             print("Collapsed contours:", time.strftime("%H:%M:%S", time.localtime()))
+
+            multi_step_feedback.setCurrentStep(2)
+            multi_step_feedback.pushInfo(self.tr('\nFiltering contour lines...\n'))
+
+            filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, input_crs)
+            print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
 
             sink.addFeatures(filtered_features.getFeatures(), QgsFeatureSink.FastInsert)
             errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
@@ -241,6 +242,11 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             return {self.CONTOUR: dest_id, self.ERRORS: errors_sink_id}
 
         else:
+            multi_step_feedback.setCurrentStep(2)
+            multi_step_feedback.pushInfo(self.tr('\nFiltering contour lines...\n'))
+
+            filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, input_crs)
+            print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
             sink.addFeatures(filtered_features.getFeatures(), QgsFeatureSink.FastInsert)
 
             return {self.CONTOUR: dest_id}

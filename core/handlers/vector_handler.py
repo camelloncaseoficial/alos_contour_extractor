@@ -71,6 +71,11 @@ class VectorHandler(QObject):
 
         return feature
 
+    @staticmethod
+    def populate_feature_attribute(features, attribute_name, attribute_value):
+        for feature in features:
+            feature[attribute_name] = attribute_value
+        return features
     def get_outershell_and_holes(self, geom, isMulti):
         outershells, donutholes = [], []
         for part in geom.asGeometryCollection():
@@ -170,16 +175,17 @@ class VectorHandler(QObject):
             if vertex_angle > 180:
                 vertex_angle = 360 - vertex_angle
             if invalid_range is not None and (vertex_angle >= minAngle and vertex_angle <= maxAngle):
-                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]))
+                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]), ['check'], True)
                 off_bounds_list.append(feature)
                 continue
             if vertex_angle < angle:
-                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]))
+                feature = self.create_feature(QgsGeometry.fromPointXY(line[i]), ['check'], True)
                 # self.attribute_handler.set_attribute_value(
                 #     feature, 'reason', 'spike')
                 off_bounds_list.append(feature)
 
-        return off_bounds_list
+        return self. populate_feature_attribute(off_bounds_list, 'check', 'out of bounds angle')
+
 
     def numpy_get_out_of_bounds_angle(self, part, angle, invalid_range=None):
         """
