@@ -77,3 +77,10 @@ gui/AboutAndFurtherInfo/ui_about_.ui
 *.xsd
 *.gpkg-shm
 *.gpkg-wal
+/.idea/.gitignore
+/.idea/dtm_tools.iml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/vcs.xml
