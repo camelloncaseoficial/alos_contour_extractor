@@ -229,8 +229,7 @@ class AlgorithmRunner():
             'INTERSECT_FIELDS': [],
             'INTERSECT_FIELDS_PREFIX': '',
             'OUTPUT': output_layer}
-        output = processing.run('native:lineintersections',
-                                parameters, context=context, feedback=feedback)
+        output = processing.run('native:lineintersections', parameters, context=context, feedback=feedback)
         return output['OUTPUT']
 
     def run_dissolve(self, input_layer, context, feedback=None, output_layer=None):

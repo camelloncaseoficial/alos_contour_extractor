@@ -37,3 +37,12 @@ GEOGRAPHIC_CONSTANT = 111110
 SIMPLIFICATION_METHOD = 0
 MAX_NODE_ANGLE = 180
 COUNTER = 1
+FILTER_TOLERANCE = {10: 20, 20: 40, 40: 80, 100: 200}
+
+
+def get_tolerance_by_interval(contour_interval, crs):
+    for interval, tolerance in FILTER_TOLERANCE.items():
+        if contour_interval == interval:
+            return tolerance
+        elif contour_interval == interval & crs.isGeographic():
+            return tolerance / GEOGRAPHIC_CONSTANT
