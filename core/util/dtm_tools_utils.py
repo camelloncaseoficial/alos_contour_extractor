@@ -22,39 +22,27 @@
  ***************************************************************************/
 """
 
-__author__ = 'CamellOnCase'
+__author__ = 'Francisco A Camello N'
 __date__ = '2021-07-20'
 __copyright__ = '(C) 2021 by CamellOnCase'
 
-# This will get replaced with a git SHA1 when you do a git archives
+# This will get replaced with a git SHA1 when you do a git archive
 
 __revision__ = '$Format:%H$'
 
-import os
-import sys
-import inspect
-
-from qgis.core import QgsProcessingAlgorithm, QgsApplication
-from .dtm_tools_provider import DtmToolsProvider
-
-cmd_folder = os.path.split(inspect.getfile(inspect.currentframe()))[0]
-
-if cmd_folder not in sys.path:
-    sys.path.insert(0, cmd_folder)
+SMOOTH_TOLERANCE = 0.3
+FIRST_SIMPLIFY_TOLERANCE = 2
+SECOND_SIMPLIFY_TOLERANCE = 1
+GEOGRAPHIC_CONSTANT = 111110
+SIMPLIFICATION_METHOD = 0
+MAX_NODE_ANGLE = 180
+COUNTER = 1
+FILTER_TOLERANCE = {10: 20, 20: 40, 40: 80, 100: 200}
 
 
-class DtmToolsPlugin(object):
-
-    def __init__(self):
-        self.provider = None
-
-    def initProcessing(self):
-        """Init Processing provider for QGIS >= 3.8."""
-        self.provider = DtmToolsProvider()
-        QgsApplication.processingRegistry().addProvider(self.provider)
-
-    def initGui(self):
-        self.initProcessing()
-
-    def unload(self):
-        QgsApplication.processingRegistry().removeProvider(self.provider)
+def get_tolerance_by_interval(contour_interval, crs):
+    for interval, tolerance in FILTER_TOLERANCE.items():
+        if contour_interval == interval:
+            return tolerance
+        elif contour_interval == interval & crs.isGeographic():
+            return tolerance / GEOGRAPHIC_CONSTANT

@@ -30,6 +30,8 @@ __copyright__ = '(C) 2021 by CamellOnCase'
 
 __revision__ = '$Format:%H$'
 
+import time
+
 import processing
 from qgis.PyQt.Qt import QVariant
 from qgis.PyQt.QtCore import QCoreApplication
@@ -79,6 +81,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
     CONTOUR = 'CONTOUR'
     ERRORS = 'ERRORS'
     KEEP_ORIGINAL = 'KEEP_ORIGINAL'
+    TOPOLOGY_CHECK = 'TOPOLOGY_CHECK'
 
     def initAlgorithm(self, config):
         """
@@ -107,6 +110,13 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterBoolean(
                 self.KEEP_ORIGINAL,
                 self.tr('Keep original'),
+                defaultValue=False
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.TOPOLOGY_CHECK,
+                self.tr('Topology check'),
                 defaultValue=False
             )
         )
@@ -148,81 +158,104 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
         multi_step_feedback = QgsProcessingMultiStepFeedback(5, feedback)
         contour_lines = QgsVectorLayer()
 
-        input_raster_layer = self.parameterAsRasterLayer(
-            parameters, self.RASTER_INPUT, context)
+        input_raster_layer = self.parameterAsRasterLayer(parameters, self.RASTER_INPUT, context)
         input_crs = input_raster_layer.crs()
-        band = self.parameterAsInt(
-            parameters, self.BAND_NUMBER, context)
-        keep_original = self.parameterAsBool(
-            parameters, self.KEEP_ORIGINAL, context)
-        interval = self.parameterAsDouble(
-            parameters, self.CONTOUR_INTERVAL, context)
-        elevation_attribute = self.parameterAsString(
-            parameters, self.ELEVATION_ATTRIBUTE, context)
+        band = self.parameterAsInt(parameters, self.BAND_NUMBER, context)
+        keep_original = self.parameterAsBool(parameters, self.KEEP_ORIGINAL, context)
+        topology_check = self.parameterAsBool(parameters, self.TOPOLOGY_CHECK, context)
+        interval = self.parameterAsDouble(parameters, self.CONTOUR_INTERVAL, context)
+        elevation_attribute = self.parameterAsString(parameters, self.ELEVATION_ATTRIBUTE, context)
 
-        contour_fields = attribute_handler.create_fields(
-            elevation_attribute=elevation_attribute)
-        errors_fields = attribute_handler.create_fields(flag=True)
+        contour_fields = attribute_handler.create_fields(elevation_attribute=elevation_attribute)
+        errors_fields = attribute_handler.create_fields(error=True)
 
-        (sink, dest_id) = self.parameterAsSink(parameters,
-                                               self.CONTOUR,
-                                               context,
-                                               contour_fields,
-                                               2,
-                                               input_crs)
+        (sink, destination_id) = self.parameterAsSink(parameters,
+                                                      self.CONTOUR,
+                                                      context,
+                                                      contour_fields,
+                                                      2,
+                                                      input_crs)
 
-        (errors_sink, errors_sink_id) = self.parameterAsSink(parameters,
-                                                             self.ERRORS,
-                                                             context,
-                                                             errors_fields,
-                                                             1,
-                                                             input_crs)
+        (line_errors_sink, line_errors_sink_id) = self.parameterAsSink(parameters,
+                                                                       self.ERRORS,
+                                                                       context,
+                                                                       errors_fields,
+                                                                       2,
+                                                                       input_crs)
 
-        
+        (point_errors_sink, point_errors_sink_id) = self.parameterAsSink(parameters,
+                                                                         self.ERRORS,
+                                                                         context,
+                                                                         errors_fields,
+                                                                         1,
+                                                                         input_crs)
+
         multi_step_feedback.setCurrentStep(0)
         multi_step_feedback.pushInfo(self.tr('Extracting contour lines...'))
 
         contour_lines = algo_runner.run_contour(input_raster_layer,
-                                            band,
-                                            elevation_attribute,
-                                            interval,
-                                            context, feedback)
+                                                band,
+                                                elevation_attribute,
+                                                interval,
+                                                context, feedback)
 
         if keep_original:
             features = contour_lines.getFeatures()
             sink.addFeatures(features, QgsFeatureSink.FastInsert)
 
-            return {self.CONTOUR: dest_id}
-        
+            return {self.CONTOUR: destination_id}
+
         multi_step_feedback.setCurrentStep(1)
         simplified_contour = vector_handler.retrieve_simplified_smoothed_contour(
-            contour_lines, context, multi_step_feedback)
+            contour_lines, input_crs, feedback=multi_step_feedback)
+        print("Simplified contours:", time.strftime("%H:%M:%S", time.localtime()))
 
-        multi_step_feedback.setCurrentStep(2)
-        multi_step_feedback.pushInfo(self.tr('\n Retrieving intersected contour lines...'))
-        errors = list()
-        intersection_points = algo_runner.run_line_intersections(
-            simplified_contour, context, feedback)
-        errors.extend(intersection_points.getFeatures())
+        if topology_check:
+            errors = list()
+            multi_step_feedback.setCurrentStep(2)
+            multi_step_feedback.pushInfo(self.tr('\n Retrieving intersected contour lines...'))
 
-        multi_step_feedback.setCurrentStep(3)
-        multi_step_feedback.pushInfo(self.tr('\n Retrieving colapsed contour lines...'))
-        for feature in simplified_contour.getFeatures():
-            colapsed_points = vector_handler.get_out_of_bounds_angle(
-                feature.geometry(), 10)
-            errors.extend(colapsed_points)
+            #intersection_points = algo_runner.run_line_intersections(simplified_contour)
+            intersection_points = vector_handler.filter_self_intersecting_lines(simplified_contour)[0]
+            #for feature in intersection_points.getFeatures():
+            for feature in intersection_points:
+                feature.setFields(attribute_handler.create_fields(None, True))
+                feature[0] = f'intersected contour line'
+                errors.append(feature)
 
-        multi_step_feedback.setCurrentStep(4)
-        multi_step_feedback.pushInfo(self.tr('Filtering contour lines...\n'))
-        filtered_features = vector_handler.filter_geometry_by_length(simplified_contour)
+            print("Intersected contours:", time.strftime("%H:%M:%S", time.localtime()))
 
-        features = filtered_features.getFeatures()
-        sink.addFeatures(features, QgsFeatureSink.FastInsert)
+            multi_step_feedback.setCurrentStep(3)
+            multi_step_feedback.pushInfo(self.tr('\n Retrieving collapsed contour lines...'))
+            print(time.strftime("%H:%M:%S", time.localtime()))
 
-        errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
+            # verificar acho que tá rodando o processo toda vez para cada feição
+            for feature in simplified_contour.getFeatures():
+                collapsed_points = vector_handler.get_out_of_bounds_angle(feature.geometry(), 10)
+                errors.extend(collapsed_points)
+            print("Collapsed contours:", time.strftime("%H:%M:%S", time.localtime()))
 
-        return {self.CONTOUR: dest_id,
-                self.ERRORS: errors_sink_id}
+            multi_step_feedback.setCurrentStep(2)
+            multi_step_feedback.pushInfo(self.tr('\nFiltering contour lines...\n'))
+
+            filtered_features = vector_handler.filter_geometry_by_length(interval, simplified_contour, input_crs)
+            print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
+
+            sink.addFeatures(filtered_features[0].getFeatures(), QgsFeatureSink.FastInsert)
+            line_errors_sink.addFeatures(filtered_features[1], QgsFeatureSink.FastInsert)
+            point_errors_sink.addFeatures(errors, QgsFeatureSink.FastInsert)
+
+            return {self.CONTOUR: destination_id, self.ERRORS: line_errors_sink_id}
+
+        else:
+            multi_step_feedback.setCurrentStep(2)
+            multi_step_feedback.pushInfo(self.tr('\nFiltering contour lines...\n'))
+
+            filtered_features = vector_handler.filter_geometry_by_length(interval, simplified_contour, input_crs)
+            print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
+            sink.addFeatures(filtered_features.getFeatures(), QgsFeatureSink.FastInsert)
+
+            return {self.CONTOUR: destination_id}
 
     def name(self):
         """
@@ -256,7 +289,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
         contain lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Contour Tools'
+        return 'Extractor Tools'
 
     def shortHelpString(self):
         """
