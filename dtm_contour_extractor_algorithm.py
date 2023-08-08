@@ -215,13 +215,20 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             multi_step_feedback.setCurrentStep(2)
             multi_step_feedback.pushInfo(self.tr('\n Retrieving intersected contour lines...'))
 
-            intersection_points = algo_runner.run_line_intersections(simplified_contour)
-            errors.extend(intersection_points.getFeatures())
+            #intersection_points = algo_runner.run_line_intersections(simplified_contour)
+            intersection_points = vector_handler.filter_self_intersecting_lines(simplified_contour)[0]
+            #for feature in intersection_points.getFeatures():
+            for feature in intersection_points:
+                feature.setFields(attribute_handler.create_fields(None, True))
+                feature[0] = f'intersected contour line'
+                errors.append(feature)
+
             print("Intersected contours:", time.strftime("%H:%M:%S", time.localtime()))
 
             multi_step_feedback.setCurrentStep(3)
             multi_step_feedback.pushInfo(self.tr('\n Retrieving collapsed contour lines...'))
             print(time.strftime("%H:%M:%S", time.localtime()))
+
             # verificar acho que tá rodando o processo toda vez para cada feição
             for feature in simplified_contour.getFeatures():
                 collapsed_points = vector_handler.get_out_of_bounds_angle(feature.geometry(), 10)
@@ -231,7 +238,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             multi_step_feedback.setCurrentStep(2)
             multi_step_feedback.pushInfo(self.tr('\nFiltering contour lines...\n'))
 
-            filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, input_crs)
+            filtered_features = vector_handler.filter_geometry_by_length(interval, simplified_contour, input_crs)
             print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
 
             sink.addFeatures(filtered_features[0].getFeatures(), QgsFeatureSink.FastInsert)
@@ -244,7 +251,7 @@ class DtmContourExtractorAlgorithm(QgsProcessingAlgorithm):
             multi_step_feedback.setCurrentStep(2)
             multi_step_feedback.pushInfo(self.tr('\nFiltering contour lines...\n'))
 
-            filtered_features = vector_handler.filter_geometry_by_length(simplified_contour, input_crs)
+            filtered_features = vector_handler.filter_geometry_by_length(interval, simplified_contour, input_crs)
             print("Filtered contours:", time.strftime("%H:%M:%S", time.localtime()))
             sink.addFeatures(filtered_features.getFeatures(), QgsFeatureSink.FastInsert)
 

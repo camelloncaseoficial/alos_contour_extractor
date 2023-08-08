@@ -39,7 +39,7 @@ from qgis.PyQt.Qt import QObject, QVariant
 from ..algorithms.algorithm_runner import AlgorithmRunner
 from .attribute_handler import AttributeHandler
 from ..util.dtm_tools_utils import SMOOTH_TOLERANCE, SIMPLIFICATION_METHOD, FIRST_SIMPLIFY_TOLERANCE, \
-    SECOND_SIMPLIFY_TOLERANCE, GEOGRAPHIC_CONSTANT, MAX_NODE_ANGLE, COUNTER
+    SECOND_SIMPLIFY_TOLERANCE, GEOGRAPHIC_CONSTANT, MAX_NODE_ANGLE, COUNTER, get_tolerance_by_interval
 
 
 class VectorHandler(QObject):
@@ -231,18 +231,21 @@ class VectorHandler(QObject):
 
         return off_bounds_list
 
-    def get_contour_intersection(self, contour_lines, context, feedback=None):
-        intersection_points = self.algorithm_runner.run_line_intersections(
-            contour_lines, context, feedback)
+    def filter_self_intersecting_lines(self, contour_lines):
+        filtered_features = []
+        intersected_features = []
 
-        print('intersection_points: ', type(intersection_points))
+        for feature in contour_lines.getFeatures():
+            geometry = feature.geometry()
+            if not geometry.intersects(geometry):
+                filtered_features.append(feature)
+            else:
+                intersected_features.append(feature)
 
-        return intersection_points
+        return filtered_features, intersected_features
 
-    def filter_geometry_by_length(self, input_layer, input_crs):
-        filter_tolerance = 100
-        if input_crs.isGeographic():
-            filter_tolerance /= self.geographic_constant
+    def filter_geometry_by_length(self, interval, input_layer, input_crs):
+        filter_tolerance = get_tolerance_by_interval(interval, input_crs)
 
         expression = f'$length < {filter_tolerance}'
         request = QgsFeatureRequest().setFilterExpression(expression)
@@ -250,11 +253,11 @@ class VectorHandler(QObject):
 
         for feature in input_layer.getFeatures(request):
             feature.setFields(self.attribute_handler.create_fields(None, True))
-            feature[0] = f'contour line with length below tolerance {feature.geometry().length()}'
+            feature[0] = f'contour line with length below tolerance {feature.geometry().length()*self.geographic_constant}'
             to_delete.append(feature)
-        print(to_delete)
-        # tratar exceção
-        res_layer = input_layer.dataProvider().deleteFeatures(to_delete)
+
+        # TODO tratar exceção
+        self.delete_features(input_layer, to_delete)
         return input_layer, to_delete
 
     def delete_features(self, input_layer, feature_list):

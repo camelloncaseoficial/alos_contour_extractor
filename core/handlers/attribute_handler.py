@@ -88,6 +88,7 @@ class AttributeHandler(QObject):
                 field_idx_list.append(field_idx)
 
         provider.deleteAttributes(field_idx_list)
-        input_layer.updateFields()         
-        
+        input_layer.updateFields()
+
         return input_layer
+
