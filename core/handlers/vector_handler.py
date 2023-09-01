@@ -246,7 +246,7 @@ class VectorHandler(QObject):
 
     def filter_geometry_by_length(self, interval, input_layer, input_crs):
         filter_tolerance = get_tolerance_by_interval(interval, input_crs)
-
+        print(filter_tolerance)
         expression = f'$length < {filter_tolerance}'
         request = QgsFeatureRequest().setFilterExpression(expression)
         to_delete = list()
@@ -258,6 +258,8 @@ class VectorHandler(QObject):
 
         # TODO tratar exceção
         self.delete_features(input_layer, to_delete)
+
+
         return input_layer, to_delete
 
     def delete_features(self, input_layer, feature_list):
